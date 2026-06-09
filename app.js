@@ -1058,13 +1058,35 @@ const App = (() => {
             btn.innerHTML = icon(enabled ? 'speaker' : 'speakerX', 'w-3.5 h-3.5');
             btn.classList.toggle('active', enabled);
             btn.title = enabled ? 'Shush the machine' : 'Make it talk';
+            const voiceSel = document.getElementById('voice-profile-select');
+            if (voiceSel) voiceSel.classList.toggle('hidden', !enabled);
             DomLayer.showToast('info', enabled ? 'Voice ON — prepare for monologue' : 'Voice OFF — silence restored');
         });
         if (StateManager.get('ttsEnabled')) {
             const ttsBtn = document.getElementById('tts-toggle-btn');
             if (ttsBtn) { ttsBtn.classList.add('active'); ttsBtn.title = 'Shush the machine'; }
         }
-        if (window.speechSynthesis) document.getElementById('tts-toggle-btn').classList.remove('hidden');
+        if (window.speechSynthesis) {
+            document.getElementById('tts-toggle-btn').classList.remove('hidden');
+            const voiceSel = document.getElementById('voice-profile-select');
+            if (voiceSel) {
+                const profiles = DomLayer.getVoiceProfiles();
+                voiceSel.innerHTML = '';
+                for (const [id, p] of Object.entries(profiles)) {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = p.name;
+                    voiceSel.appendChild(opt);
+                }
+                voiceSel.value = StateManager.get('voiceProfile') || 'default';
+                voiceSel.classList.toggle('hidden', !StateManager.get('ttsEnabled'));
+                voiceSel.addEventListener('change', () => {
+                    StateManager.set('voiceProfile', voiceSel.value);
+                    localStorage.setItem('war_chest_voice_profile', voiceSel.value);
+                    DomLayer.showInfoInStatus('Voice profile: ' + voiceSel.selectedOptions[0].textContent);
+                });
+            }
+        }
 
         const deltaBtn = document.getElementById('delta-toggle-btn');
         if (deltaBtn) deltaBtn.addEventListener('click', toggleDeltaMode);

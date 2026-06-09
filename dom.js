@@ -639,18 +639,48 @@ const DomLayer = (() => {
         el.classList.toggle('active', active);
     }
 
+    const VOICE_PROFILES = {
+        'default': { name: 'System Default', rate: 1.0, pitch: 1.0, volume: 0.8, hint: null },
+        'narrator': { name: 'The Narrator', rate: 0.85, pitch: 0.85, volume: 0.9, hint: 'Daniel' },
+        'speedrunner': { name: 'Speedrunner', rate: 1.8, pitch: 1.1, volume: 0.8, hint: null },
+        'demon': { name: 'Possessed', rate: 0.7, pitch: 0.3, volume: 0.85, hint: null },
+        'chipmunk': { name: 'Chipmunk', rate: 1.6, pitch: 2.0, volume: 0.7, hint: null },
+        'robot': { name: 'The Machine', rate: 0.9, pitch: 0.75, volume: 0.8, hint: 'Zarvox' },
+        'whisper': { name: 'Whisper', rate: 0.7, pitch: 1.0, volume: 0.25, hint: null },
+        'theatre': { name: 'Theatre Kid', rate: 0.95, pitch: 1.2, volume: 0.9, hint: 'Samantha' },
+    };
+
+    function _resolveVoice(hint) {
+        if (!hint || !window.speechSynthesis) return null;
+        const voices = speechSynthesis.getVoices();
+        const match = voices.find(v => v.name.toLowerCase().includes(hint.toLowerCase()));
+        if (match) return match;
+        for (const v of voices) {
+            if (v.lang.startsWith('en') && v.localService === true && v.name.toLowerCase().includes(hint.toLowerCase())) return v;
+        }
+        return null;
+    }
+
     function speakResponse(text, onEnd) {
         if (!window.speechSynthesis) return;
         window.speechSynthesis.cancel();
+        const profileId = StateManager.get('voiceProfile') || 'default';
+        const profile = VOICE_PROFILES[profileId] || VOICE_PROFILES['default'];
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        utterance.volume = 0.8;
+        utterance.rate = profile.rate;
+        utterance.pitch = profile.pitch;
+        utterance.volume = profile.volume;
+        if (profile.hint) {
+            const voice = _resolveVoice(profile.hint);
+            if (voice) utterance.voice = voice;
+        }
         utterance.onstart = () => AvatarEngine.startSpeaking();
         utterance.onend = () => { AvatarEngine.stopSpeaking(); if (onEnd) onEnd(); };
         utterance.onerror = () => { AvatarEngine.stopSpeaking(); if (onEnd) onEnd(); };
         speechSynthesis.speak(utterance);
     }
+
+    function getVoiceProfiles() { return VOICE_PROFILES; }
 
     function renderSystemCard(analysis) {
         const terminal = document.getElementById('terminal-output');
@@ -840,6 +870,6 @@ const DomLayer = (() => {
         updatePromptCharCount, updateDocUI, updateSessionStats, scrollToBottom, toggleVault,
         renderConversation, showAttachmentPreview, removeAttachmentPreview, syncFleetSelection,
         updateTokenFlow, exportChat, exportHistoryJSON, importHistoryJSON, updateRagIndicator, speakResponse, stopSpeaking,
-        renderSystemCard, annotateResponse, renderDeltaComparison, renderKnowledgeGraph, renderSessionTimeline,
+        renderSystemCard, annotateResponse, renderDeltaComparison, renderKnowledgeGraph, renderSessionTimeline, getVoiceProfiles,
     };
 })();
