@@ -455,7 +455,7 @@
 
                     <!-- Textarea -->
                     <textarea id="terminal-input"
-                              placeholder="Enter command or message..."
+                              placeholder="Ask anything…"
                               class="flex-1 rounded px-3 py-2.5 text-sm text-white font-mono resize-none overflow-y-auto focus:outline-none"
                               style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);min-height:42px"
                               rows="1"
@@ -488,21 +488,21 @@
                     <div class="flex items-center gap-1 flex-shrink-0">
                         <button id="delta-toggle-btn"
                                 class="toolbar-btn toolbar-btn-compact"
-                                title="Delta Mode: Compare 4 models"
+                                title="Compare responses from 4 models simultaneously"
                                 aria-label="Toggle Delta Mode">
                             <span data-icon="cpu"
                                   style="display:inline-block;vertical-align:middle"></span>
-                            <span class="hidden sm:inline">Δ</span>
+                            <span class="btn-label">COMPARE</span>
                         </button>
                         <span id="rag-indicator" class="toolbar-indicator hidden"
-                              data-icon="doc"> RAG</span>
+                              data-icon="doc"> RAG active</span>
                     </div>
 
                     <!-- Center: KG collapse toggle (hidden until entities exist) -->
                     <div class="flex-1 flex items-center justify-center">
                         <button id="kg-collapse-btn"
                                 class="composer-kg-toggle"
-                                title="Toggle entity graph"
+                                title="Show/hide entities extracted from this conversation"
                                 aria-label="Toggle knowledge graph"
                                 aria-expanded="true">
                             <span>🧠</span>
@@ -513,9 +513,10 @@
 
                     <!-- Right zone: meta + export -->
                     <div class="flex items-center gap-2 flex-shrink-0">
+                        <span style="width:1px;height:14px;background:rgba(255,255,255,0.06);flex-shrink:0"></span>
                         <span id="input-chars" class="composer-meta-text">0c</span>
                         <span id="active-model-indicator"
-                              class="composer-meta-text hidden"
+                              class="composer-meta-text"
                               style="color:var(--text-tertiary)">
                             <span id="active-model-indicator-name"
                                   class="font-bold" style="color:var(--green-1)"></span>
@@ -524,7 +525,9 @@
                                 class="toolbar-btn toolbar-btn-compact"
                                 title="Export conversation as markdown"
                                 aria-label="Export chat"
-                                data-icon="download"></button>
+                                data-icon="download">
+                            <span class="btn-label">EXPORT</span>
+                        </button>
                     </div>
                 </div>
 

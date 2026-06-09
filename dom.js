@@ -834,7 +834,7 @@ const DomLayer = (() => {
             question: '#ff4444'
         };
 
-        if (countEl) countEl.textContent = `${graph.entities.length} entity${graph.entities.length !== 1 ? 'ies' : 'y'}`;
+        if (countEl) countEl.textContent = `${graph.entities.length} ${graph.entities.length !== 1 ? 'entities' : 'entity'}`;
 
         const sorted = [...graph.entities].sort((a, b) => (b.count || 1) - (a.count || 1));
 
@@ -842,7 +842,7 @@ const DomLayer = (() => {
             const color = typeColors[entity.type] || '#888888';
 
             const chip = document.createElement('div');
-            chip.title = `${entity.type} · mentioned ${entity.count || 1}×`;
+            chip.title = `${entity.name} · ${entity.type} · mentioned ${entity.count || 1}× · Click to explore relationships`;
 
             chip.style.cssText = `
                 flex-shrink: 0;

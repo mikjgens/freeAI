@@ -938,11 +938,11 @@ const App = (() => {
         if (chars) {
             const len = ta.value.length;
             if (len === 0) {
-                chars.textContent = '0c';
+                chars.textContent = '0 chars';
                 chars.classList.remove('over-limit');
             } else {
                 const tok = Math.ceil(len / 3.5);
-                chars.textContent = len + 'c · ~' + tok + 't';
+                chars.textContent = len + ' chars · ~' + tok + ' tok';
                 chars.classList.toggle('over-limit', tok > 500);
             }
         }
