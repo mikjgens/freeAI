@@ -193,7 +193,7 @@ const DomLayer = (() => {
         speakerBtn.className = 'speaker-btn msg-action absolute top-0 right-[5.5rem] px-1 py-0.5';
         speakerBtn.style.cssText = 'color:var(--text-tertiary)';
         speakerBtn.innerHTML = icon('speaker', 'w-3 h-3');
-        speakerBtn.title = 'Read aloud';
+        speakerBtn.title = 'Hear it spoken';
         speakerBtn.onclick = () => {
             const t = element.querySelector('.markdown-body').textContent;
             if (t) DomLayer.speakResponse(t);

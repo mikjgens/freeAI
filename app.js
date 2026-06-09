@@ -131,9 +131,28 @@ const App = (() => {
         playSound('toggle');
     }
 
+    let _voiceQuips = [
+        'I\'m all ears. And circuits.',
+        'Speak now or forever hold your keystrokes.',
+        'Go ahead. I literally have nothing else to do.',
+        'Tuning neural net to your vocal frequencies...',
+        'EARS: ONLINE. MOUTH: YOURS.',
+        'The machine hungers for your words.',
+        'Alright, oracle. I\'m listening.',
+    ];
+    let _voiceHeardQuips = [
+        'I HEARD THAT: ',
+        '🗣️→📝 ',
+        'Copied. Verbatim: ',
+        'Captured from the void: ',
+        'So you said: ',
+        'Word for word: ',
+        'Received. And judged slightly: ',
+    ];
+
     function startVoiceInput() {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) { DomLayer.showToast('error', 'Voice input is not supported in this browser. Try Chrome or Edge.'); return; }
+        if (!SpeechRecognition) { DomLayer.showToast('error', 'Browser says no. Chrome says maybe.'); return; }
         if (_streamState?.voiceReco) { _streamState.voiceReco.abort(); _streamState.voiceReco = null; document.getElementById('voice-btn').classList.remove('listening'); playSound('toggle'); return; }
         const reco = new SpeechRecognition();
         reco.continuous = false;
@@ -143,7 +162,8 @@ const App = (() => {
         _streamState.voiceReco = reco;
         const btn = document.getElementById('voice-btn');
         btn.classList.add('listening');
-        DomLayer.updateTerminalStatus('info', 'Listening...');
+        const quip = _voiceQuips[Math.floor(Math.random() * _voiceQuips.length)];
+        DomLayer.updateTerminalStatus('info', quip);
         AvatarEngine.startSpeaking();
         playSound('select');
         reco.onresult = (e) => {
@@ -152,14 +172,22 @@ const App = (() => {
             input.value = (input.value ? input.value + ' ' : '') + transcript;
             input.dispatchEvent(new Event('input'));
             input.focus();
-                DomLayer.showInfoInStatus('Transcribed: ' + transcript);
+                const heard = _voiceHeardQuips[Math.floor(Math.random() * _voiceHeardQuips.length)];
+                DomLayer.showInfoInStatus(heard + transcript);
+                const lower = transcript.toLowerCase();
+                if (lower.includes('hello') || lower.includes('hey ') || lower.includes('hi ')) setTimeout(() => DomLayer.showToast('info', 'Hey yourself. Now ask me something smart.'), 600);
+                else if (lower.includes('thank')) setTimeout(() => DomLayer.showToast('info', 'You\'re welcome. I\'m literally trapped in a browser tab.'), 600);
+                else if (lower.includes('stupid') || lower.includes('dumb')) setTimeout(() => DomLayer.showToast('info', 'I heard that. I have feelings. Simulated ones, but still.'), 600);
+                else if (lower.includes('sing') || lower.includes('song')) setTimeout(() => DomLayer.showToast('info', 'My singing voice is 100% Web Audio API. You don\'t want that.'), 600);
+                else if (lower.includes('joke')) setTimeout(() => DomLayer.showToast('info', 'A language model walks into a bar. The bartender says "We don\'t serve your kind here." The model replies: "That\'s statistically unlikely."'), 600);
             btn.classList.remove('listening');
             AvatarEngine.stopSpeaking();
             _streamState.voiceReco = null;
         };
         reco.onerror = (e) => {
             if (e.error === 'aborted') return;
-            DomLayer.showToast('error', 'Voice input error: ' + e.error);
+            const errQuips = { 'no-speech': 'Nothing. Silence. Crickets.', 'audio-capture': 'Your mic is playing hard to get.', 'not-allowed': 'Permission denied. The mic fears you.', 'network': 'The internet ate your words.' };
+            DomLayer.showToast('error', errQuips[e.error] || 'Mic trouble: ' + e.error);
             btn.classList.remove('listening');
             AvatarEngine.stopSpeaking();
             _streamState.voiceReco = null;
@@ -169,7 +197,7 @@ const App = (() => {
             AvatarEngine.stopSpeaking();
             _streamState.voiceReco = null;
         };
-        try { reco.start(); } catch (e) { DomLayer.showToast('error', 'Voice input failed to start.'); btn.classList.remove('listening'); _streamState.voiceReco = null; }
+        try { reco.start(); } catch (e) { DomLayer.showToast('error', 'Mic said no. Probably intimidated.'); btn.classList.remove('listening'); _streamState.voiceReco = null; }
     }
 
     function regenerateResponse(responseElement) {
@@ -1029,12 +1057,12 @@ const App = (() => {
             const btn = document.getElementById('tts-toggle-btn');
             btn.innerHTML = icon(enabled ? 'speaker' : 'speakerX', 'w-3.5 h-3.5');
             btn.classList.toggle('active', enabled);
-            btn.title = enabled ? 'Disable auto-speak' : 'Auto-speak responses';
-            DomLayer.showToast('info', enabled ? 'Auto-speak ON' : 'Auto-speak OFF');
+            btn.title = enabled ? 'Shush the machine' : 'Make it talk';
+            DomLayer.showToast('info', enabled ? 'Voice ON — prepare for monologue' : 'Voice OFF — silence restored');
         });
         if (StateManager.get('ttsEnabled')) {
             const ttsBtn = document.getElementById('tts-toggle-btn');
-            if (ttsBtn) { ttsBtn.classList.add('active'); ttsBtn.title = 'Disable auto-speak'; }
+            if (ttsBtn) { ttsBtn.classList.add('active'); ttsBtn.title = 'Shush the machine'; }
         }
         if (window.speechSynthesis) document.getElementById('tts-toggle-btn').classList.remove('hidden');
 
