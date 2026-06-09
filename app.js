@@ -27,7 +27,7 @@ const App = (() => {
                 const sysMsg = StateManager.get('conversationHistory')[0];
                 const refText = matches.map(c => '[Reference: ' + c.text + ']').join('\n\n');
                 sysMsg.content = (sysMsg.content || '') + '\n\n---\nRelevant reference document excerpts:\n' + refText;
-                DomLayer.showInfoInStatus('📄 ' + matches.length + ' chunks matched from reference doc');
+                DomLayer.showInfoInStatus('' + matches.length + ' chunks matched from reference doc');
                 DomLayer.updateRagIndicator(true);
             }
         } else {
@@ -73,7 +73,7 @@ const App = (() => {
         _streamState.voiceReco = reco;
         const btn = document.getElementById('voice-btn');
         btn.classList.add('listening');
-        DomLayer.updateTerminalStatus('info', '🎤 Listening...');
+        DomLayer.updateTerminalStatus('info', 'Listening...');
         AvatarEngine.startSpeaking();
         playSound('select');
         reco.onresult = (e) => {
@@ -82,7 +82,7 @@ const App = (() => {
             input.value = (input.value ? input.value + ' ' : '') + transcript;
             input.dispatchEvent(new Event('input'));
             input.focus();
-            DomLayer.showInfoInStatus('🎤 Transcribed: ' + transcript);
+                DomLayer.showInfoInStatus('Transcribed: ' + transcript);
             btn.classList.remove('listening');
             AvatarEngine.stopSpeaking();
             _streamState.voiceReco = null;
@@ -143,6 +143,8 @@ const App = (() => {
     function startStream() {
         const abortCtrl = new AbortController();
         StateManager.set('abortController', abortCtrl);
+        const output = document.getElementById('terminal-output');
+        if (output) output.setAttribute('aria-live', 'off');
         const container = DomLayer.createResponseContainer();
         const streamState = { container, fullText: '', tokenCount: 0, tokensReceived: false, startTime: performance.now(), attachmentCleared: false, tokenFlowInterval: null, slowWarning: null };
         _streamState = streamState;
@@ -190,7 +192,8 @@ const App = (() => {
             onToolStart: () => DomLayer.updateTerminalStatus('info', 'Executing Tool...'),
             onFallback: (fbModel, failedModel) => {
                 const notice = document.createElement('div');
-                notice.className = 'text-[10px] text-yellow-500/80 font-mono border-l-2 border-yellow-500/30 pl-2 mb-1';
+                notice.className = 'text-[10px] font-mono border-l-2 pl-2 mb-1';
+                notice.style.cssText = 'color:var(--amber);border-color:rgba(255,180,71,0.3)';
                 notice.textContent = '[SYSTEM: ' + failedModel.provider.toUpperCase() + ' FAILED \u2192 FALLBACK TO ' + fbModel.provider.toUpperCase() + ' (' + fbModel.name + ')]';
                 document.getElementById('terminal-output')?.appendChild(notice);
                 playSound('error');
@@ -216,6 +219,8 @@ const App = (() => {
         else DomLayer.updateTokenFlow(null);
         DomLayer.updateSendStopButtons(false);
         DomLayer.updateTerminalStatus('standby');
+        const outputEl = document.getElementById('terminal-output');
+        if (outputEl) outputEl.setAttribute('aria-live', 'polite');
         if (finalText) {
             DomLayer.finalizeResponse(streamState.container.textContainer, finalText);
             StateManager.pushMessage({ role: 'assistant', content: finalText });
@@ -408,60 +413,84 @@ const App = (() => {
         try { const saved = localStorage.getItem(STORAGE_KEY_PROMPT); if (saved) { StateManager.set('userPrompt', saved); document.getElementById('prompt-editor').value = saved; } } catch (e) { }
         DomLayer.updatePromptCharCount();
     }
-    function showConfirmModal({ title, message, onConfirm, onCancel }) {
-        const previousActiveElement = document.activeElement; // Save focus
-        let overlay = document.getElementById('confirm-modal-overlay');
-        if (overlay) { overlay.remove(); overlay = null; }
-        overlay = document.createElement('div');
-        overlay.id = 'confirm-modal-overlay';
-        overlay.className = 'fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center';
-        overlay.innerHTML = '<div class="bg-[#0c0c1a] border border-green-500/20 rounded-sm p-6 max-w-md w-full shadow-[0_0_30px_rgba(0,255,0,0.08)]"><h2 class="text-green-400 font-bold text-lg mb-3 tracking-wider">' + escapeHtml(title) + '</h2><p class="text-green-300/70 text-sm mb-6 font-mono leading-relaxed">' + escapeHtml(message) + '</p><div class="flex gap-3 justify-end"><button class="px-4 py-2 text-xs text-green-500/60 hover:text-green-400 border border-green-500/20 hover:border-green-500/40 rounded-sm transition-colors font-mono tracking-wider uppercase cancel-btn">Cancel</button><button class="px-4 py-2 text-xs text-black bg-gradient-to-r from-green-400 to-emerald-500 rounded-sm font-bold font-mono tracking-wider hover:from-green-300 hover:to-emerald-400 transition-all ok-btn">Confirm</button></div></div>';
-        document.body.appendChild(overlay);
-        const okBtn = overlay.querySelector('.ok-btn');
-        const cancelBtn = overlay.querySelector('.cancel-btn');
-        okBtn.focus();
-        const restoreFocus = () => {
-            if (previousActiveElement && previousActiveElement.focus) previousActiveElement.focus();
+    function showConfirmModal({ title, message, onConfirm, onCancel, typedWord }) {
+        const previousActiveElement = document.activeElement;
+        const overlay = document.getElementById('confirm-modal-overlay');
+        const titleEl = document.getElementById('confirm-modal-title');
+        const msgEl = document.getElementById('confirm-modal-message');
+        const typedSection = document.getElementById('confirm-modal-typed-section');
+        const typedWordEl = document.getElementById('confirm-modal-typed-word');
+        const input = document.getElementById('confirm-modal-input');
+        const okBtn = document.getElementById('confirm-modal-ok');
+        const cancelBtn = document.getElementById('confirm-modal-cancel');
+        if (!overlay || !titleEl || !msgEl || !okBtn || !cancelBtn) return;
+        titleEl.textContent = title;
+        msgEl.textContent = message;
+        if (typedWord) {
+            typedSection.style.display = 'block';
+            typedWordEl.textContent = typedWord;
+            input.value = '';
+            okBtn.disabled = true;
+            okBtn.style.opacity = '0.4';
+            okBtn.style.pointerEvents = 'none';
+            const checkInput = () => {
+                const match = input.value.trim() === typedWord;
+                okBtn.disabled = !match;
+                okBtn.style.opacity = match ? '1' : '0.4';
+                okBtn.style.pointerEvents = match ? 'auto' : 'none';
+            };
+            input.addEventListener('input', checkInput);
+            input.focus();
+        } else {
+            typedSection.style.display = 'none';
+            okBtn.disabled = false;
+            okBtn.style.opacity = '1';
+            okBtn.style.pointerEvents = 'auto';
+        }
+        const restoreFocus = () => { if (previousActiveElement && previousActiveElement.focus) previousActiveElement.focus(); };
+        const cleanup = () => {
+            overlay.classList.remove('open');
+            setTimeout(() => { overlay.classList.add('hidden'); }, 200);
+            restoreFocus();
         };
-        okBtn.addEventListener('click', () => { overlay.remove(); restoreFocus(); onConfirm(); });
-        cancelBtn.addEventListener('click', () => { overlay.remove(); restoreFocus(); onCancel && onCancel(); });
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) { overlay.remove(); restoreFocus(); onCancel && onCancel(); } });
-        const focusable = overlay.querySelectorAll('button');
-        const first = focusable[0], last = focusable[focusable.length - 1];
-        overlay.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') { overlay.remove(); restoreFocus(); onCancel && onCancel(); }
-            if (e.key === 'Tab') { if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
-        });
+        overlay.classList.remove('hidden');
+        requestAnimationFrame(() => overlay.classList.add('open'));
+        const onConfirmWrap = () => { cleanup(); onConfirm(); };
+        const onCancelWrap = () => { cleanup(); onCancel && onCancel(); };
+        const newOk = okBtn.cloneNode(true);
+        okBtn.parentNode.replaceChild(newOk, okBtn);
+        newOk.addEventListener('click', onConfirmWrap);
+        const newCancel = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+        newCancel.addEventListener('click', onCancelWrap);
+        overlay.onclick = (e) => { if (e.target === overlay) onCancelWrap(); };
+        const handler = (e) => {
+            if (e.key === 'Escape') { onCancelWrap(); document.removeEventListener('keydown', handler); }
+            if (e.key === 'Enter' && !okBtn.disabled) { onConfirmWrap(); document.removeEventListener('keydown', handler); }
+            if (e.key === 'Tab') {
+                const focusable = overlay.querySelectorAll('button, input:not([type="hidden"])');
+                const first = focusable[0], last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            }
+        };
+        document.addEventListener('keydown', handler);
     }
 
     function wipeSystem() {
         showConfirmModal({
             title: 'Wipe System',
-            message: 'Type DESTROY in the input field.\n\nThis will permanently delete all:\n\u2022 API Keys\n\u2022 Conversation History\n\u2022 Stored Prompts\n\u2022 Reference Documents\n\u2022 Custom Models\n\u2022 Model Validation Cache\n\nType DESTROY to confirm.',
+            message: 'This will permanently delete all API keys, conversation history, stored prompts, reference documents, and custom models.',
+            typedWord: 'DESTROY',
             onConfirm: () => {
-                const input = document.getElementById('terminal-input');
-                input.placeholder = 'type DESTROY to confirm...';
-                input.value = '';
-                input.focus();
-                const handler = () => {
-                    if (input.value.trim() === 'DESTROY') {
-                        playSound('wipe');
-                        StateManager.wipeAll();
-                        document.querySelectorAll('#terminal-output > *').forEach(el => el.remove());
-                        DomLayer.showToast('success', 'All data wiped. System reset.');
-                        input.value = '';
-                        DomLayer.updateTerminalStatus('standby');
-                        DomLayer.updateContextMeter();
-                        DomLayer.updateSessionStats();
-                        DomLayer.showInfoInStatus('System wiped clean');
-                        input.removeEventListener('keydown', handler);
-                        _wipeHandlerAttached = false;
-                    }
-                };
-                if (!_wipeHandlerAttached) {
-                    input.addEventListener('keydown', handler);
-                    _wipeHandlerAttached = true;
-                }
+                playSound('wipe');
+                StateManager.wipeAll();
+                document.querySelectorAll('#terminal-output > *').forEach(el => el.remove());
+                DomLayer.showToast('success', 'All data wiped. System reset.');
+                DomLayer.updateTerminalStatus('standby');
+                DomLayer.updateContextMeter();
+                DomLayer.updateSessionStats();
+                DomLayer.showInfoInStatus('System wiped clean');
             }
         });
     }
@@ -490,7 +519,7 @@ const App = (() => {
                     .then(r => r.json().then(d => {
                         const valid = d.models?.some(m => m.name === 'models/' + id);
                         StateManager.setValidated(id + ':' + model.provider, valid);
-                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-30', 'pointer-events-none'); }
+                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-50', 'pointer-events-none'); }
                     }).catch(() => { })).catch(() => { }).finally(() => fetchAndValidate(idx + 1));
             } else {
                 fetch(cfg.url, { headers: { 'Authorization': 'Bearer ' + apiKey } })
@@ -498,7 +527,7 @@ const App = (() => {
                         const modelList = d.data || d.models || [];
                         const valid = modelList.some(m => (m.id === id) || (m.name === id));
                         StateManager.setValidated(id + ':' + model.provider, valid);
-                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-30', 'pointer-events-none'); }
+                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-50', 'pointer-events-none'); }
                     }).catch(() => { })).catch(() => { }).finally(() => fetchAndValidate(idx + 1));
             }
         }
@@ -541,14 +570,19 @@ const App = (() => {
         if (!file) { App.removeAttachment(); return; }
         if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) { DomLayer.showToast('error', 'Unsupported file type: ' + file.type + '. Please upload JPG, PNG, GIF, or WebP images only.'); return; }
         if (file.size > 5 * 1024 * 1024) { DomLayer.showToast('error', 'Image exceeds 5MB limit.'); return; }
-        const reader = new FileReader();
-        reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+            const dimensions = { w: img.naturalWidth, h: img.naturalHeight };
             const state = StateManager.get('pendingAttachment') || {};
             state.fileName = file.name;
-            state.dataUrl = ev.target.result;
+            state.dataUrl = img.src;
             StateManager.set('pendingAttachment', state);
-            DomLayer.showAttachmentPreview(state.fileName, state.dataUrl);
+            DomLayer.showAttachmentPreview(state.fileName, state.dataUrl, file.size, dimensions);
             playSound('select');
+        };
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            img.src = ev.target.result;
         };
         reader.readAsDataURL(file);
     }
@@ -598,7 +632,8 @@ const App = (() => {
     }
 
     function setupModelListEvents() {
-        document.getElementById('model-list').addEventListener('click', (e) => {
+        const list = document.getElementById('model-list');
+        list.addEventListener('click', (e) => {
             const btn = e.target.closest('.custom-delete-btn');
             if (!btn) return;
             const item = btn.closest('.model-item');
@@ -609,6 +644,27 @@ const App = (() => {
             try { localStorage.setItem('war_chest_custom_models', JSON.stringify(custom)); } catch (_) {}
             DomLayer.showToast('info', 'Removed custom model');
             DomLayer.renderModelList();
+        });
+        list.addEventListener('keydown', (e) => {
+            const items = list.querySelectorAll('.model-item');
+            if (!items.length) return;
+            const currentIdx = Array.from(items).indexOf(document.activeElement);
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                const next = (currentIdx + 1) % items.length;
+                items[next].focus();
+                items[next].click();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prev = (currentIdx - 1 + items.length) % items.length;
+                items[prev].focus();
+                items[prev].click();
+            } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (document.activeElement && document.activeElement.classList.contains('model-item')) {
+                    document.activeElement.click();
+                }
+            }
         });
     }
 
@@ -627,9 +683,10 @@ const App = (() => {
             StateManager.set('audioMuted', muted);
             localStorage.setItem('war_chest_audio_muted', JSON.stringify(muted));
             const btn = document.getElementById('audio-toggle-btn');
-            btn.textContent = muted ? '🔇' : '🔊';
+            btn.innerHTML = icon(muted ? 'speakerX' : 'speaker', 'w-3.5 h-3.5');
             btn.title = muted ? 'Unmute sounds' : 'Mute sounds';
-            btn.className = 'px-3 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border rounded transition-all ' + (muted ? 'border-red-500/50 hover:border-red-400' : 'border-green-500/50 hover:border-green-400');
+            btn.className = 'icon-btn ' + (muted ? '' : '');
+            btn.style.cssText = muted ? '' : 'border-color:var(--green-2);color:var(--green-0)';
         });
     }
 
@@ -676,6 +733,26 @@ const App = (() => {
         document.getElementById('save-keys-btn').addEventListener('click', saveKeys);
         document.getElementById('load-env-btn').addEventListener('click', loadEnvFile);
         document.getElementById('env-file-input').addEventListener('change', handleEnvFile);
+        document.querySelectorAll('#vault-modal .eye-toggle').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const input = btn.parentElement.querySelector('input');
+                if (!input) return;
+                const isPassword = input.type === 'password';
+                input.type = isPassword ? 'text' : 'password';
+                btn.setAttribute('aria-pressed', String(!isPassword));
+                btn.innerHTML = icon(isPassword ? 'eyeSlash' : 'eye', 'w-3.5 h-3.5');
+            });
+        });
+        document.getElementById('vault-modal').addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                const focusable = document.querySelectorAll('#vault-modal input:not([type="file"]):not([type="hidden"]), #vault-modal button, #vault-modal textarea');
+                if (!focusable.length) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+            }
+        });
     }
 
     function setupGlobalEvents() {
@@ -734,6 +811,7 @@ const App = (() => {
             StateManager.set('ttsEnabled', enabled);
             localStorage.setItem('war_chest_tts_enabled', JSON.stringify(enabled));
             const btn = document.getElementById('tts-toggle-btn');
+            btn.innerHTML = icon(enabled ? 'speaker' : 'speakerX', 'w-3.5 h-3.5');
             btn.classList.toggle('active', enabled);
             btn.title = enabled ? 'Disable auto-speak' : 'Auto-speak responses';
             DomLayer.showToast('info', enabled ? 'Auto-speak ON' : 'Auto-speak OFF');
@@ -745,8 +823,31 @@ const App = (() => {
         if (window.speechSynthesis) document.getElementById('tts-toggle-btn').classList.remove('hidden');
     }
 
-    function init() {
+    function replaceIcons() {
+            document.querySelectorAll('[data-icon]').forEach(el => {
+                const name = el.getAttribute('data-icon');
+                if (name && ICONS[name]) el.insertAdjacentHTML('afterbegin', ICONS[name]);
+                el.removeAttribute('data-icon');
+            });
+        }
+
+        function setupDragEvents() {
+            const area = document.getElementById('chat-input-area');
+            if (!area) return;
+            const input = document.getElementById('file-input');
+            area.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); area.classList.add('drag-over'); });
+            area.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); area.classList.remove('drag-over'); });
+            area.addEventListener('drop', (e) => {
+                e.preventDefault(); e.stopPropagation(); area.classList.remove('drag-over');
+                const files = e.dataTransfer.files;
+                if (!files || !files.length) return;
+                for (const f of files) { if (f.type.startsWith('image/')) { handleAttachment(f); break; } }
+            });
+        }
+
+        function init() {
         try { const saved = localStorage.getItem('war_chest_custom_models'); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) StateManager.set('customModels', parsed); } } catch (_) {}
+        replaceIcons();
         loadConversation();
         loadPrompt();
         loadDraft();
@@ -763,12 +864,13 @@ const App = (() => {
         setupGlobalEvents();
         setupHeaderEvents();
         setupToolbarEvents();
+        setupDragEvents();
         AvatarEngine.init();
         document.getElementById('terminal-input').style.height = document.getElementById('terminal-input').scrollHeight + 'px';
         setTimeout(() => playSound('poweron'), 300);
         if (StateManager.get('audioMuted')) {
             const btn = document.getElementById('audio-toggle-btn');
-            if (btn) { btn.textContent = '🔇'; btn.title = 'Unmute sounds'; btn.className = 'px-3 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-red-500/50 rounded transition-all hover:border-red-400'; }
+            if (btn) { btn.innerHTML = icon('speakerX', 'w-3.5 h-3.5'); btn.title = 'Unmute sounds'; }
         }
     }
 

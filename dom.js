@@ -24,7 +24,7 @@ const DomLayer = (() => {
                 break;
             case 'error':
                 el.textContent = '\u26A0 ' + detail;
-                if (pulse) pulse.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+                if (pulse) { pulse.style.background = 'var(--amber)'; pulse.className = 'w-2 h-2 rounded-full'; }
                 break;
         }
     }
@@ -45,13 +45,14 @@ const DomLayer = (() => {
         const pct = document.getElementById('context-meter-pct');
         if (!label || !bar || !pct || !model) return;
         const maxCtx = parseCtx(model.ctx);
-        if (maxCtx === Infinity) { label.textContent = model.name; bar.style.width = '0%'; pct.textContent = '\u2014'; return; }
+        if (maxCtx === Infinity) { label.textContent = model.name; bar.style.width = '0%'; pct.textContent = '\u2014'; pct.style.color = ''; return; }
         const used = estimateTokens(history);
         const pctVal = Math.min(100, Math.round((used / maxCtx) * 100));
         label.textContent = model.name;
         bar.style.width = pctVal + '%';
-        bar.className = 'h-full transition-all duration-500 ease-out rounded-full ' + (pctVal < 60 ? 'bg-green-500' : pctVal < 80 ? 'bg-yellow-500' : 'bg-red-500');
+        bar.style.background = pctVal < 60 ? '#00ff41' : pctVal < 80 ? '#ffb347' : '#ff4444';
         pct.textContent = pctVal + '%';
+        pct.style.color = pctVal < 60 ? 'var(--text-tertiary)' : pctVal < 80 ? 'var(--amber)' : '#ff4444';
     }
 
     function updateActiveModelBar(model) {
@@ -64,8 +65,8 @@ const DomLayer = (() => {
         if (!model) { bar.classList.add('hidden'); indicator.classList.add('hidden'); return; }
         bar.classList.remove('hidden');
         nameEl.textContent = model.name;
-        const toolEmoji = model.tools === 'Function Calling' ? ' \uD83D\uDD2D' : model.tools === 'Built-in Tools' ? ' \u2699\uFE0F' : '';
-        extraEl.textContent = '\u00B7 ' + model.provider + ' \u00B7 ' + (model.ctx || '?') + toolEmoji;
+        const toolIcon = model.tools === 'Function Calling' ? icon('wrench', 'w-3 h-3 align-middle') : model.tools === 'Built-in Tools' ? icon('cpu', 'w-3 h-3 align-middle') : '';
+        extraEl.textContent = '\u00B7 ' + model.provider + ' \u00B7 ' + (model.ctx || '?') + ' ' + toolIcon;
         indicator.classList.remove('hidden');
         indicatorName.textContent = model.name;
     }
@@ -74,9 +75,9 @@ const DomLayer = (() => {
         const container = document.getElementById('toast-container');
         const toast = document.createElement('div');
         toast.className = 'toast ' + type;
-        const icons = { success: '\u2713', error: '\u2717', warning: '\u26A0', info: '\u2139' };
-        toast.innerHTML = '<span class="font-bold mr-1.5">' + (icons[type] || '\u2139') + '</span>' + message;
-        container.appendChild(toast);
+        const iconMap = { success: 'check', error: 'xCircle', warning: 'warning', info: 'info' };
+        const ico = iconMap[type] || 'info';
+        toast.innerHTML = '<span class="font-bold mr-1.5 align-middle">' + icon(ico, 'w-3.5 h-3.5') + '</span>' + message;
         requestAnimationFrame(() => toast.classList.add('show'));
         setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 4000);
     }
@@ -125,12 +126,15 @@ const DomLayer = (() => {
             div.dataset.provider = model.provider;
             div.dataset.customDelete = isCustom ? '1' : '';
             div.setAttribute('role', 'option');
+            div.setAttribute('tabindex', '0');
             div.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             if (!isVerified && Object.keys(validatedModels).length > 0) div.classList.add('opacity-50');
             if (isSelected) div.classList.add('active');
-            const toolIcon = model.tools === 'Function Calling' ? '<span class="text-[8px] text-green-500/60" title="Function Calling">\uD83D\uDD2D</span>' : model.tools === 'Built-in Tools' ? '<span class="text-[8px] text-cyan-500/60" title="Built-in Tools">\u2699\uFE0F</span>' : '';
+            const toolIcon = model.tools === 'Function Calling' ? icon('wrench', 'w-3 h-3 align-text-top') : model.tools === 'Built-in Tools' ? icon('cpu', 'w-3 h-3 align-text-top') : '';
             const tagsHtml = model.tags ? model.tags.slice(0, 3).map(t => '<span class="inline-block text-[7px] px-1 py-0.5 rounded bg-gray-800/60 border border-gray-700/50 text-gray-500 leading-none">' + escapeHtml(t) + '</span>').join('') : '';
-            div.innerHTML = '<span class="mt-0.5 text-sm">' + model.color + '</span><div class="flex-1 min-w-0"><div class="font-bold ' + (isCustom ? 'text-blue-300' : 'text-gray-200') + ' truncate flex items-center gap-2">' + escapeHtml(model.name) + ' ' + toolIcon + (!isVerified && Object.keys(validatedModels).length > 0 ? '<span class="text-[8px] text-yellow-500 border border-yellow-500/30 px-1 rounded">UNVERIFIED</span>' : '') + (isCustom ? '<span class="text-[8px] text-blue-400 border border-blue-400/30 px-1 rounded">CUSTOM</span>' : '') + '</div><div class="text-gray-500 text-[10px] truncate">' + escapeHtml(model.desc) + '</div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-1">' + tagsHtml + '</div>' : '') + '</div>' + (isCustom ? '<button class="custom-delete-btn text-red-400 hover:text-red-300 text-xs px-1">&times;</button>' : '');
+            const dotColors = { groq: 'var(--green-0)', openrouter: 'var(--amber)', google: 'var(--green-2)', nvidia: 'rgba(200,200,255,0.5)' };
+            const dotColor = dotColors[model.provider] || 'var(--text-tertiary)';
+            div.innerHTML = '<span class="mt-0.5 inline-flex"><span class="w-2 h-2 rounded-full" style="background:' + dotColor + '"></span></span><div class="flex-1 min-w-0"><div class="font-bold ' + (isCustom ? 'text-blue-300' : 'text-gray-200') + ' truncate flex items-center gap-2">' + escapeHtml(model.name) + ' ' + toolIcon + (!isVerified && Object.keys(validatedModels).length > 0 ? '<span class="text-[8px] px-1 rounded" style="color:var(--amber);border:1px solid rgba(255,180,71,0.3)">UNVERIFIED</span>' : '') + (isCustom ? '<span class="text-[8px] text-blue-400 border border-blue-400/30 px-1 rounded">CUSTOM</span>' : '') + '</div><div class="text-gray-500 text-[10px] truncate">' + escapeHtml(model.desc) + '</div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-1">' + tagsHtml + '</div>' : '') + '</div>' + (isCustom ? '<button class="custom-delete-btn text-red-400 hover:text-red-300 text-xs px-1">&times;</button>' : '');
             div.onclick = (e) => { if (e.target.closest('.custom-delete-btn')) return; App.selectModel(model); };
             list.appendChild(div);
         });
@@ -141,18 +145,18 @@ const DomLayer = (() => {
         if (!profile) return;
         if (!model) { profile.innerHTML = 'Select a model from the fleet to view detailed telemetry and capabilities...'; return; }
         const tagsHtml = model.tags && model.tags.length ? model.tags.map(t => '<span class="tag-pill inline-block text-[9px] px-1.5 py-0.5 rounded bg-green-900/20 border border-green-500/20 text-green-400 leading-none mr-1 mb-1">' + escapeHtml(t) + '</span>').join('') : '';
-        const weaknessHtml = model.weakness ? '<div class="mt-2 p-2 bg-red-900/10 rounded border border-red-500/15 text-red-400/80 text-[10px]">\u26A0 ' + escapeHtml(model.weakness) + '</div>' : '';
+        const weaknessHtml = model.weakness ? '<div class="mt-2 p-2 rounded border text-[10px]" style="background:rgba(255,180,71,0.06);border-color:rgba(255,180,71,0.15);color:var(--amber-dim)">' + icon('warning', 'w-3 h-3 align-text-top') + ' ' + escapeHtml(model.weakness) + '</div>' : '';
         if (model.type !== 'chat') {
-            profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Type</span><span class="text-yellow-400 font-bold uppercase">' + escapeHtml(model.type) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2">' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-3 p-3 bg-yellow-900/20 rounded border border-yellow-500/30 text-yellow-400 text-[11px]">\u26A0\uFE0F This is a ' + model.type.toUpperCase() + '-only model. Select a chat model for conversation.</div></div>';
+            profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Type</span><span class="text-yellow-400 font-bold uppercase">' + escapeHtml(model.type) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2">' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-3 p-3 rounded border text-[11px]" style="background:rgba(255,180,71,0.06);border-color:rgba(255,180,71,0.2);color:var(--amber-dim)">' + icon('warning', 'w-3.5 h-3.5 align-text-top') + ' This is a ' + model.type.toUpperCase() + '-only model. Select a chat model for conversation.</div></div>';
             return;
         }
         const toolLabel = model.tools === 'Function Calling' ? 'Function Calling' : model.tools === 'Built-in Tools' ? 'Built-in Tools' : model.tools || 'None';
-        const toolColor = model.tools === 'Function Calling' || model.tools === 'Built-in Tools' ? 'text-green-400' : 'text-red-400';
+        const toolColor = model.tools === 'Function Calling' || model.tools === 'Built-in Tools' ? 'text-green-400' : '';
         let builtInHtml = '';
-        if (model.builtInTools && model.builtInTools.length) builtInHtml = '<div class="mt-1 flex flex-wrap gap-1">' + model.builtInTools.map(t => '<span class="text-[8px] px-1 py-0.5 rounded bg-green-900/15 border border-green-500/20 text-green-400/70">\u2699 ' + escapeHtml(t) + '</span>').join('') + '</div>';
+        if (model.builtInTools && model.builtInTools.length) builtInHtml = '<div class="mt-1 flex flex-wrap gap-1">' + model.builtInTools.map(t => '<span class="text-[8px] px-1 py-0.5 rounded border" style="background:var(--green-6);border-color:var(--green-4);color:var(--green-1)">' + icon('cpu', 'w-2.5 h-2.5 align-text-top') + ' ' + escapeHtml(t) + '</span>').join('') + '</div>';
         let localToolsHtml = '';
-        if (model.tools === 'Function Calling' && HARDCODED_TOOLS.length) localToolsHtml = '<div class="mt-1 text-[9px] text-gray-500">\uD83D\uDCBB Local: ' + HARDCODED_TOOLS.map(t => '<span class="text-gray-400">' + escapeHtml(t.function.name) + '</span>').join(', ') + '</div>';
-        profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Model ID</span><span class="text-green-400 font-mono text-[10px]">' + escapeHtml(model.modelId) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Tools</span><span class="' + toolColor + ' font-bold">' + toolLabel + '</span></div>' + builtInHtml + localToolsHtml + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2 border-t border-gray-800 pt-2"><span class="text-[9px] text-gray-500 uppercase tracking-wider w-full mb-1">Excels at</span>' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-2 p-2 bg-black/30 rounded border border-gray-800/50 text-gray-400 italic text-[11px]">"' + escapeHtml(model.desc) + '"</div></div>';
+        if (model.tools === 'Function Calling' && HARDCODED_TOOLS.length) localToolsHtml = '<div class="mt-1 text-[9px]" style="color:var(--text-tertiary)">' + icon('wrench', 'w-2.5 h-2.5 align-text-top') + ' Local: ' + HARDCODED_TOOLS.map(t => '<span style="color:var(--text-secondary)">' + escapeHtml(t.function.name) + '</span>').join(', ') + '</div>';
+        profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Model ID</span><span class="text-green-400 font-mono text-[10px]">' + escapeHtml(model.modelId) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Tools</span><span class="' + toolColor + ' font-bold">' + toolLabel + '</span></div>' + builtInHtml + localToolsHtml + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2 border-t border-gray-800 pt-2"><span class="text-[9px] text-gray-500 uppercase tracking-wider w-full mb-1">Excels at</span>' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-2 p-2 rounded border italic text-[11px]" style="background:rgba(0,0,0,0.15);border-color:rgba(255,255,255,0.05);color:var(--text-tertiary)">"' + escapeHtml(model.desc) + '"</div></div>';
     }
     function _buildUserMessageElement(text, attachment, onDelete) {
         const wrapper = document.createElement('div');
@@ -167,10 +171,10 @@ const DomLayer = (() => {
         ts.textContent = formatTimestamp(new Date());
         div.appendChild(ts);
         const copyBtn = document.createElement('button');
-        copyBtn.className = 'msg-action absolute top-0 right-6 text-[10px] text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
-        copyBtn.textContent = '\u29C9';
+        copyBtn.className = 'msg-action absolute top-0 right-6 text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
+        copyBtn.innerHTML = icon('clipboard', 'w-3 h-3');
         copyBtn.title = 'Copy';
-        copyBtn.onclick = () => { const t = div.cloneNode(true).textContent.replace(ts.textContent, '').trim(); navigator.clipboard.writeText(t).catch(() => {}); copyBtn.textContent = '\u2713'; setTimeout(() => { copyBtn.textContent = '\u29C9'; }, 1000); };
+        copyBtn.onclick = () => { const t = div.cloneNode(true).textContent.replace(ts.textContent, '').trim(); navigator.clipboard.writeText(t).catch(() => {}); copyBtn.innerHTML = icon('check', 'w-3 h-3'); setTimeout(() => { copyBtn.innerHTML = icon('clipboard', 'w-3 h-3'); }, 1000); };
         wrapper.appendChild(copyBtn);
         const delBtn = document.createElement('button');
         delBtn.className = 'msg-action absolute top-0 right-0 text-[10px] text-gray-600 hover:text-red-400 px-1 py-0.5 rounded';
@@ -183,8 +187,9 @@ const DomLayer = (() => {
 
     function _buildResponseActionButtons(element) {
         const speakerBtn = document.createElement('button');
-        speakerBtn.className = 'speaker-btn msg-action absolute top-0 right-[5.5rem] text-[11px] px-1 py-0.5';
-        speakerBtn.textContent = '\uD83D\uDD0A';
+        speakerBtn.className = 'speaker-btn msg-action absolute top-0 right-[5.5rem] px-1 py-0.5';
+        speakerBtn.style.cssText = 'color:var(--text-tertiary)';
+        speakerBtn.innerHTML = icon('speaker', 'w-3 h-3');
         speakerBtn.title = 'Read aloud';
         speakerBtn.onclick = () => {
             const t = element.querySelector('.markdown-body').textContent;
@@ -192,20 +197,23 @@ const DomLayer = (() => {
         };
         element.appendChild(speakerBtn);
         const copyBtn = document.createElement('button');
-        copyBtn.className = 'msg-action absolute top-0 right-[4.25rem] text-[11px] text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
-        copyBtn.textContent = '\u29C9';
+        copyBtn.className = 'msg-action absolute top-0 right-[4.25rem] px-1 py-0.5 rounded';
+        copyBtn.style.cssText = 'color:var(--text-tertiary)';
+        copyBtn.innerHTML = icon('clipboard', 'w-3 h-3');
         copyBtn.title = 'Copy response';
-        copyBtn.onclick = () => { const t = element.querySelector('.markdown-body').textContent; navigator.clipboard.writeText(t).catch(() => {}); copyBtn.textContent = '\u2713'; copyBtn.classList.add('text-green-400'); setTimeout(() => { copyBtn.textContent = '\u29C9'; copyBtn.classList.remove('text-green-400'); }, 1500); };
+        copyBtn.onclick = () => { const t = element.querySelector('.markdown-body').textContent; navigator.clipboard.writeText(t).catch(() => {}); copyBtn.innerHTML = icon('check', 'w-3 h-3'); copyBtn.style.color = 'var(--green-0)'; setTimeout(() => { copyBtn.innerHTML = icon('clipboard', 'w-3 h-3'); copyBtn.style.color = ''; }, 1500); };
         element.appendChild(copyBtn);
         const regenBtn = document.createElement('button');
-        regenBtn.className = 'msg-action absolute top-0 right-[2.75rem] text-[11px] text-gray-600 hover:text-cyan-400 px-1 py-0.5 rounded';
-        regenBtn.textContent = '\u21BB';
+        regenBtn.className = 'msg-action absolute top-0 right-[2.75rem] px-1 py-0.5 rounded';
+        regenBtn.style.cssText = 'color:var(--text-tertiary)';
+        regenBtn.innerHTML = icon('arrowPath', 'w-3 h-3');
         regenBtn.title = 'Regenerate response';
         regenBtn.onclick = () => { if (!StateManager.get('isStreaming')) App.regenerateResponse(element); };
         element.appendChild(regenBtn);
         const delBtn = document.createElement('button');
-        delBtn.className = 'msg-action absolute top-0 right-0 text-[11px] text-gray-600 hover:text-red-400 px-1 py-0.5 rounded';
-        delBtn.textContent = '\u00D7';
+        delBtn.className = 'msg-action absolute top-0 right-0 px-1 py-0.5 rounded';
+        delBtn.style.cssText = 'color:var(--text-tertiary)';
+        delBtn.innerHTML = icon('xMark', 'w-3 h-3');
         delBtn.title = 'Delete response';
         delBtn.onclick = () => {
             const containers = document.querySelectorAll('#terminal-output .msg-container');
@@ -257,7 +265,10 @@ const DomLayer = (() => {
     function finalizeResponseDOM(container, markdownText) {
         if (!container) return;
         const cursorSpan = container.querySelector('.stream-cursor');
-        if (cursorSpan) cursorSpan.remove();
+        if (cursorSpan) {
+            cursorSpan.style.opacity = '0';
+            setTimeout(() => cursorSpan.remove(), 150);
+        }
         if (markdownText && typeof marked !== 'undefined') {
             const raw = marked.parse(markdownText);
             container.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(raw) : raw;
@@ -282,13 +293,15 @@ const DomLayer = (() => {
         const wrapper = document.createElement('div');
         wrapper.className = 'msg-container relative group';
         const div = document.createElement('div');
-        div.className = 'text-red-400 font-mono text-sm border-l-2 border-red-500/30 pl-2 mb-1';
-        div.innerHTML = '<span class="text-red-500">ERROR:</span> ' + escapeHtml(msg);
+        div.className = 'font-mono text-sm border-l-2 pl-2 mb-1';
+        div.style.cssText = 'color:var(--amber);border-color:rgba(255,180,71,0.3)';
+        div.innerHTML = '<span class="inline-flex items-center gap-1 align-middle" style="color:var(--amber)">' + icon('warning', 'w-3.5 h-3.5') + 'ERROR:</span> ' + escapeHtml(msg);
         wrapper.appendChild(div);
         if (showRetry) {
             const retryBtn = document.createElement('button');
-            retryBtn.className = 'retry-btn text-[10px] text-gray-500 hover:text-green-400 border border-gray-700 hover:border-green-500/50 rounded px-2 py-0.5 ml-2 mb-2 transition-all';
-            retryBtn.textContent = '\u21BB Retry';
+            retryBtn.className = 'retry-btn text-[10px] rounded px-2 py-0.5 ml-2 mb-2 transition-all inline-flex items-center gap-1';
+            retryBtn.style.cssText = 'color:var(--text-tertiary);border:1px solid rgba(255,255,255,0.1)';
+            retryBtn.innerHTML = icon('arrowPath', 'w-3 h-3') + ' Retry';
             retryBtn.onclick = () => { if (StateManager.get('isStreaming')) return; wrapper.remove(); App.sendMessage(); };
             wrapper.appendChild(retryBtn);
         }
@@ -299,8 +312,9 @@ const DomLayer = (() => {
     function renderToolCallCard(toolCalls, results) {
         const terminal = document.getElementById('terminal-output');
         const card = document.createElement('div');
-        card.className = 'msg-container font-mono text-xs border border-green-500/20 rounded-lg p-3 mb-3 bg-gray-900/40';
-        let html = '<div class="text-green-400 font-bold mb-2 flex items-center gap-2">\u2699\uFE0F Tool Execution</div>';
+        card.className = 'msg-container font-mono text-xs border rounded-lg p-3 mb-3';
+        card.style.cssText = 'border-color:var(--green-4);background:rgba(0,0,0,0.2)';
+        let html = '<div class="font-bold mb-2 flex items-center gap-2" style="color:var(--green-1)">' + icon('wrench', 'w-3.5 h-3.5') + ' Tool Execution</div>';
         for (let i = 0; i < toolCalls.length; i++) {
             const tc = toolCalls[i], r = results[i], name = tc.function?.name || 'unknown';
             let argsDisp, resDisp;
@@ -346,8 +360,9 @@ const DomLayer = (() => {
             thumb.onclick = () => showImageLightbox(src);
             wrapper.appendChild(thumb);
             const dl = document.createElement('button');
-            dl.className = 'absolute top-1 right-1 bg-black/70 hover:bg-black text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity leading-none';
-            dl.textContent = '\u2B07';
+            dl.className = 'absolute top-1 right-1 rounded opacity-0 group-hover:opacity-100 transition-opacity';
+            dl.style.cssText = 'background:rgba(0,0,0,0.7);padding:2px 4px;line-height:1';
+            dl.innerHTML = icon('download', 'w-3 h-3');
             dl.onclick = (e) => { e.stopPropagation(); downloadImage(src, img.mime); };
             wrapper.appendChild(dl);
             container.appendChild(wrapper);
@@ -413,13 +428,17 @@ const DomLayer = (() => {
         terminal.scrollTop = terminal.scrollHeight;
     }
 
-    function showAttachmentPreview(fileName, dataUrl) {
+    function showAttachmentPreview(fileName, dataUrl, fileSize, dimensions) {
         const preview = document.getElementById('attachment-preview');
         const thumb = document.getElementById('attach-thumb');
         const name = document.getElementById('attach-name');
+        const sizeEl = document.getElementById('attach-size');
+        const dimsEl = document.getElementById('attach-dims');
         if (!preview || !thumb || !name) return;
         thumb.src = dataUrl;
         name.textContent = fileName;
+        if (sizeEl && fileSize) sizeEl.textContent = (fileSize / 1024).toFixed(0) + 'KB';
+        if (dimsEl && dimensions) dimsEl.textContent = dimensions.w + 'x' + dimensions.h;
         preview.classList.remove('hidden');
     }
 
@@ -449,7 +468,7 @@ const DomLayer = (() => {
         if (!emptyState || !loadedState) return;
         if (refDoc) {
             emptyState.classList.add('hidden');
-            loadedState.classList.remove('hidden');
+            loadedState.classList.toggle('loaded', true);
             document.getElementById('doc-filename').textContent = refDoc.name;
             document.getElementById('doc-filesize').textContent = (refDoc.size / 1024).toFixed(0) + 'KB';
             const chunks = chunkDocument(refDoc.content);
@@ -468,7 +487,7 @@ const DomLayer = (() => {
             updateRagIndicator(false);
         } else {
             emptyState.classList.remove('hidden');
-            loadedState.classList.add('hidden');
+            loadedState.classList.toggle('loaded', false);
             StateManager.set('ragChunks', []);
             StateManager._ragIndex = null;
             if (ragControls) ragControls.classList.add('hidden');
@@ -498,10 +517,12 @@ const DomLayer = (() => {
         const el = document.getElementById('token-flow');
         if (!el) return;
         if (tokensPerSec == null) {
-            el.innerHTML = '';
+            el.style.opacity = '0';
+            setTimeout(() => { el.innerHTML = ''; }, 250);
             return;
         }
-        el.innerHTML = '<span class="text-[10px] text-green-400 font-mono font-bold tracking-wider">\u25B8 '
+        el.style.opacity = '1';
+        el.innerHTML = '<span class="text-[10px] font-mono font-bold tracking-wider" style="color:var(--green-1)">\u25B8 '
             + tokensPerSec.toFixed(0) + ' t/s  \u00B7 ' + (totalTokens || 0).toLocaleString() + ' tok  \u00B7 '
             + elapsed.toFixed(1) + 's</span>';
     }

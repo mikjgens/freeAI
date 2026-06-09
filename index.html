@@ -6,76 +6,87 @@
     <meta name="color-scheme" content="dark">
     <title>War Chest Command Center v2.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdn.jsdelivr.net/npm/fontsource-jetbrains-mono@5.0.0/index.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5.1.1/index.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <style>
-        body { font-family: 'JetBrains Mono', monospace; background-color: #050505; color: #e0e0e0; }
-        .terminal-text { color: #00ff41; text-shadow: 0 0 5px rgba(0, 255, 65, 0.5); }
-        .glass-panel { background: rgba(15, 15, 15, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00ff41; }
-        .blink { animation: blinker 1s linear infinite; }
+        :root {
+            --green-0: #00ff41; --green-1: rgba(0,255,65,0.7); --green-2: rgba(0,255,65,0.4);
+            --green-3: rgba(0,255,65,0.15); --green-4: rgba(0,255,65,0.08);
+            --green-5: rgba(0,255,65,0.05); --green-6: rgba(0,255,65,0.03);
+            --amber: #ffb347; --amber-dim: rgba(255,180,71,0.6);
+            --bg-deep: #050505; --bg-surface: #0a0a0a; --bg-elevated: #0f1209;
+            --border-subtle: rgba(255,255,255,0.06); --border-mid: rgba(255,255,255,0.1);
+            --text-primary: #d4d4d4; --text-secondary: #888; --text-tertiary: #555;
+            --z-scanlines: 100; --z-header: 200; --z-sidebar: 300; --z-toast: 400;
+            --z-modal: 500; --z-lightbox: 600; --z-overlay: 700;
+            --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+        }
+        body { font-family: var(--font-mono); background-color: var(--bg-deep); color: var(--text-primary); }
+        .glass-panel { background: var(--bg-elevated); border: 1px solid var(--border-subtle); box-shadow: inset 0 1px 0 rgba(0,255,65,0.04), 0 0 0 1px rgba(0,255,65,0.03); }
+        .panel-header { background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: var(--bg-deep); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--green-2); }
+        .terminal-text { color: var(--green-0); text-shadow: 0 0 4px rgba(0,255,65,0.5), 0 0 12px rgba(0,255,65,0.15); }
+        .blink { animation: blinker 1s step-end infinite; }
         @keyframes blinker { 50% { opacity: 0; } }
-        .model-item { transition: all 0.2s ease; border-left: 2px solid transparent; }
-        .model-item:hover { background: rgba(0, 255, 65, 0.05); border-left: 2px solid rgba(0, 255, 65, 0.5); }
-        .model-item.active { background: rgba(0, 255, 65, 0.1); border-left: 2px solid #00ff41; }
-        .glow-text { text-shadow: 0 0 10px rgba(0, 255, 65, 0.3); }
-        .scanlines { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to bottom,rgba(255,255,255,0),rgba(255,255,255,0) 50%,rgba(0,0,0,0.1) 50%,rgba(0,0,0,0.1)); background-size: 100% 4px; pointer-events: none; z-index: 9999; opacity: 0.3; }
-        @keyframes flicker { 0% { opacity: 0.97; } 5% { opacity: 0.95; } 10% { opacity: 0.9; } 15% { opacity: 0.95; } 20% { opacity: 0.99; } 50% { opacity: 0.95; } 80% { opacity: 0.9; } 100% { opacity: 0.97; } }
-        .crt-flicker { animation: flicker 0.15s infinite; }
+        .model-item { transition: border-left 0.15s ease, background 0.15s ease; border-left: 2px solid transparent; }
+        .model-item:hover { background: var(--green-5); border-left-color: var(--green-2); }
+        .model-item.active { background: var(--green-4); border-left-color: var(--green-0); }
+        .glow-text { text-shadow: 0 0 4px rgba(0,255,65,0.7), 0 0 12px rgba(0,255,65,0.3), 0 0 30px rgba(0,255,65,0.1); }
+        .scanlines { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px); pointer-events: none; z-index: var(--z-scanlines); opacity: 0.15; }
+        @keyframes flicker { 0% { opacity: 0.985; } 50% { opacity: 0.97; } 100% { opacity: 0.985; } }
+        .crt-flicker { animation: flicker 0.05s infinite; }
         .offline-banner { transition: transform 0.3s ease; }
         .offline-banner.hidden { transform: translateY(-100%); }
         .tag-pill { transition: all 0.15s ease; }
         .tag-pill:hover { filter: brightness(1.3); }
-        .filter-btn { transition: all 0.15s ease; }
-        .filter-btn.active { background: rgba(0, 255, 65, 0.15); border-color: rgba(0, 255, 65, 0.5); color: #00ff41; }
-        .cap-filter-btn.active { border-color: rgba(0, 255, 65, 0.4); color: #00ff41; }
-        .msg-timestamp { font-size: 9px; opacity: 0.4; transition: opacity 0.2s; }
-        .msg-timestamp:hover { opacity: 0.8; }
-        .markdown-body code { background: rgba(0, 255, 65, 0.1); border: 1px solid rgba(0, 255, 65, 0.15); border-radius: 3px; padding: 1px 4px; font-size: 0.9em; }
-        .markdown-body pre { background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 4px; padding: 8px; overflow-x: auto; margin: 6px 0; }
+        .filter-btn { transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
+        .filter-btn.active { background: var(--green-4); border-color: var(--green-3); color: var(--green-0); }
+        .cap-filter-btn.active { border-color: var(--green-2); color: var(--green-0); }
+        .msg-timestamp { font-size: 9px; opacity: 0.35; transition: opacity 0.2s; }
+        .msg-timestamp:hover { opacity: 0.7; }
+        .markdown-body code { background: var(--green-5); border: 1px solid var(--green-4); border-radius: 3px; padding: 1px 4px; font-size: 0.9em; }
+        .markdown-body pre { background: rgba(0,0,0,0.5); border: 1px solid var(--border-subtle); border-radius: 4px; padding: 8px; overflow-x: auto; margin: 6px 0; }
         .markdown-body pre code { background: none; border: none; padding: 0; }
         .markdown-body ul, .markdown-body ol { padding-left: 1.5em; margin: 4px 0; }
         .markdown-body li { list-style: inherit; }
-        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { color: #00ff41; margin: 8px 0 4px; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { color: var(--green-0); margin: 8px 0 4px; }
         .markdown-body h1 { font-size: 1.2em; }
         .markdown-body h2 { font-size: 1.1em; }
         .markdown-body h3 { font-size: 1.05em; }
         .markdown-body h4 { font-size: 1em; }
-        .markdown-body p { margin: 4px 0; }
+        .markdown-body p { margin: 4px 0; line-height: 1.5; }
         .markdown-body strong { color: #fff; }
         .markdown-body a { color: #4ade80; text-decoration: underline; }
-        .markdown-body blockquote { border-left: 2px solid #00ff41; padding-left: 8px; margin: 4px 0; opacity: 0.8; }
-        .markdown-body hr { border: none; border-top: 1px solid rgba(0, 255, 65, 0.2); margin: 8px 0; }
+        .markdown-body blockquote { border-left: 2px solid var(--green-0); padding-left: 8px; margin: 4px 0; opacity: 0.8; }
+        .markdown-body hr { border: none; border-top: 1px solid var(--green-4); margin: 8px 0; }
         .markdown-body table { border-collapse: collapse; margin: 6px 0; font-size: 0.9em; }
-        .markdown-body th, .markdown-body td { border: 1px solid rgba(255, 255, 255, 0.1); padding: 4px 8px; text-align: left; }
-        .markdown-body th { background: rgba(0, 255, 65, 0.1); color: #00ff41; }
-        #prompt-editor { scrollbar-width: thin; scrollbar-color: #2a2a2a transparent; overflow-y: auto; }
-        #prompt-editor:focus { box-shadow: 0 0 0 1px rgba(0, 255, 65, 0.2); }
+        .markdown-body th, .markdown-body td { border: 1px solid var(--border-mid); padding: 4px 8px; text-align: left; }
+        .markdown-body th { background: var(--green-5); color: var(--green-0); }
+        #prompt-editor { scrollbar-width: thin; scrollbar-color: #222 transparent; overflow-y: auto; }
+        #prompt-editor:focus { box-shadow: 0 0 0 1px var(--green-3); }
         #doc-drop-zone { min-height: 48px; transition: all 0.15s ease; }
-        #doc-drop-zone.drag-over { border-color: rgba(0, 255, 65, 0.5); background: rgba(0, 255, 65, 0.05); }
+        #doc-drop-zone.drag-over { border-color: var(--green-2); background: var(--green-6); }
+        #doc-loaded-state { display: none; }
+        #doc-loaded-state.loaded { display: flex; }
         #image-drop-overlay { display: none; }
         #chat-input-area.drag-over #image-drop-overlay { display: flex; }
         #chat-input-area.drag-over .input-row, #chat-input-area.drag-over #attachment-preview { opacity: 0.3; pointer-events: none; }
-        #toast-container { position: fixed; top: 12px; right: 12px; z-index: 10001; display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: 380px; }
-        .toast { pointer-events: auto; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-family: 'JetBrains Mono', monospace; backdrop-filter: blur(12px); box-shadow: 0 4px 24px rgba(0,0,0,0.5); transform: translateX(120%); transition: transform 0.3s ease, opacity 0.3s ease; opacity: 0; }
+        #toast-container { position: fixed; top: 12px; right: 12px; z-index: var(--z-toast); display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: 380px; }
+        .toast { pointer-events: auto; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); box-shadow: 0 4px 24px rgba(0,0,0,0.5); transform: translateX(120%); transition: transform 0.3s ease, opacity 0.3s ease; opacity: 0; background: rgba(15,18,9,0.95); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .toast.show { transform: translateX(0); opacity: 1; }
-        .toast.success { background: rgba(0, 30, 10, 0.92); border: 1px solid rgba(0, 255, 65, 0.3); color: #4ade80; }
-        .toast.error { background: rgba(30, 0, 0, 0.92); border: 1px solid rgba(255, 50, 50, 0.3); color: #f87171; }
-        .toast.warning { background: rgba(30, 20, 0, 0.92); border: 1px solid rgba(255, 200, 50, 0.3); color: #fbbf24; }
-        .toast.info { background: rgba(0, 10, 30, 0.92); border: 1px solid rgba(50, 150, 255, 0.3); color: #60a5fa; }
         #confirm-modal-overlay { display: none; }
         #confirm-modal-overlay.open { display: flex; }
         #confirm-modal-overlay .modal-box { transform: scale(0.95); transition: transform 0.2s ease; }
         #confirm-modal-overlay.open .modal-box { transform: scale(1); }
-        #confirm-modal-input { font-family: 'JetBrains Mono', monospace; }
-        #scroll-bottom-btn { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 15; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+        #confirm-modal-input { font-family: var(--font-mono); }
+        #scroll-bottom-btn { opacity: 0; pointer-events: none; transition: opacity 0.2s ease; z-index: var(--z-header); }
         #scroll-bottom-btn.visible { opacity: 1; pointer-events: auto; }
         #active-model-bar { transition: all 0.2s ease; }
-        .context-horizon { text-align: center; font-size: 9px; color: rgba(0, 255, 65, 0.35); letter-spacing: 2px; padding: 8px 0; border-top: 1px solid rgba(0, 255, 65, 0.08); border-bottom: 1px solid rgba(0, 255, 65, 0.08); margin: 8px 0; user-select: none; font-family: 'JetBrains Mono', monospace; }
+        .context-horizon { text-align: center; font-size: 9px; color: var(--green-2); letter-spacing: 2px; padding: 8px 0; border-top: 1px solid var(--green-5); border-bottom: 1px solid var(--green-5); margin: 8px 0; user-select: none; font-family: var(--font-mono); }
         .msg-archived { opacity: 0.3 !important; filter: grayscale(0.8) !important; pointer-events: none !important; transition: all 0.5s ease; }
         .msg-action { opacity: 0; transition: opacity 0.15s ease; }
         .msg-container:hover .msg-action { opacity: 1; }
@@ -86,186 +97,217 @@
         .retry-btn { transition: all 0.15s ease; }
         .retry-btn:hover { filter: brightness(1.3); }
         #terminal-input { transition: height 0.25s ease-out; }
-        #chat-input-area { transition: all 0.25s ease-out; }
-        #chat-input-area.input-expanded { border-top-color: rgba(0,255,65,0.25); box-shadow: 0 -4px 24px rgba(0,255,65,0.06); }
-        .toolbar-btn { padding: 1px 7px; font-size: 11px; background: rgba(30,30,30,0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; color: #555; transition: all 0.15s ease; cursor: pointer; line-height: 1.6; }
-        .toolbar-btn:hover { background: rgba(0,255,65,0.08); border-color: rgba(0,255,65,0.25); color: #00ff41; }
-        .toolbar-btn.active { color: #00ff41; border-color: rgba(0,255,65,0.3); background: rgba(0,255,65,0.08); }
-        .toolbar-btn.listening { color: #00ff41; border-color: rgba(0,255,65,0.6); background: rgba(0,255,65,0.12); animation: pulse-glow 1s ease-in-out infinite; }
-        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 4px rgba(0,255,65,0.2); } 50% { box-shadow: 0 0 12px rgba(0,255,65,0.5); } }
-        .toolbar-indicator { font-size: 10px; color: #555; padding: 1px 6px; border-radius: 3px; background: rgba(30,30,30,0.4); border: 1px solid rgba(255,255,255,0.06); letter-spacing: 0.5px; transition: all 0.3s ease; }
-        .toolbar-indicator.active { color: #00ff41; border-color: rgba(0,255,65,0.3); background: rgba(0,255,65,0.08); }
-
-        .speaker-btn { opacity: 0; transition: opacity 0.15s ease; font-size: 12px; cursor: pointer; color: #555; background: none; border: none; padding: 0 4px; }
-        .speaker-btn:hover { color: #00ff41; }
-        .speaker-btn.speaking { color: #00ff41; animation: pulse-glow 0.8s ease-in-out infinite; }
+        #chat-input-area { transition: border-color 0.25s ease-out, box-shadow 0.25s ease-out; }
+        #chat-input-area.input-expanded { border-top-color: var(--green-3); box-shadow: 0 -4px 24px rgba(0,255,65,0.05); }
+        .toolbar-btn { padding: 1px 7px; font-size: 11px; background: rgba(30,30,30,0.4); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-tertiary); transition: all 0.15s ease; cursor: pointer; line-height: 1.6; }
+        .toolbar-btn:hover { background: var(--green-5); border-color: var(--green-3); color: var(--green-0); }
+        .toolbar-btn.active { color: var(--green-0); border-color: var(--green-3); background: var(--green-5); }
+        .toolbar-btn.listening { color: var(--green-0); border-color: var(--green-2); background: var(--green-5); animation: pulse-glow 1s ease-in-out infinite; }
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 4px var(--green-3); } 50% { box-shadow: 0 0 12px var(--green-2); } }
+        .toolbar-indicator { font-size: 10px; color: var(--text-tertiary); padding: 1px 6px; border-radius: 3px; background: rgba(30,30,30,0.4); border: 1px solid var(--border-subtle); letter-spacing: 0.5px; transition: all 0.3s ease; }
+        .toolbar-indicator.active { color: var(--green-0); border-color: var(--green-3); background: var(--green-5); }
+        .speaker-btn { opacity: 0; transition: opacity 0.15s ease; font-size: 12px; cursor: pointer; color: var(--text-tertiary); background: none; border: none; padding: 0 4px; }
+        .speaker-btn:hover { color: var(--green-0); }
+        .speaker-btn.speaking { color: var(--green-0); animation: pulse-glow 0.8s ease-in-out infinite; }
         .msg-container:hover .speaker-btn { opacity: 1; }
-        @media (prefers-reduced-motion: reduce) { .crt-flicker { animation: none; } .scanlines { opacity: 0.15; } .blink { animation: none; opacity: 1; } .animate-pulse { animation: none; } .model-item, .filter-btn, .tag-pill, .offline-banner, #doc-drop-zone, .toast, #terminal-input, #chat-input-area { transition: none; } #scroll-bottom-btn { transition: none; } .msg-action { opacity: 1; } .toolbar-btn.listening { animation: none; } .speaker-btn.speaking { animation: none; } }
+        #token-flow { transition: opacity 0.25s ease; }
+        .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px; border-radius: 4px; cursor: pointer; transition: all 0.15s ease; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); color: var(--text-tertiary); }
+        .icon-btn:hover { background: var(--green-5); border-color: var(--green-3); color: var(--green-0); }
+        .icon-btn svg { display: block; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green-0); box-shadow: 0 0 8px rgba(0,255,65,0.8); }
+        .stream-cursor { transition: opacity 0.15s ease; }
+        .context-meter-bar { transition: width 0.5s ease-out, background 0.5s ease-out; }
+        .context-meter-pct { transition: color 0.5s ease-out; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .crt-flicker { animation: none; } .scanlines { opacity: 0.08; } .blink { animation: none; opacity: 1; }
+            .model-item, .filter-btn, .tag-pill, .offline-banner, #doc-drop-zone, .toast, #terminal-input, #chat-input-area { transition: none; }
+            #scroll-bottom-btn { transition: none; } .msg-action { opacity: 1; }
+            .toolbar-btn.listening { animation: none; } .speaker-btn.speaking { animation: none; }
+            .status-dot { animation: none; }
+        }
+
+        @media print {
+            body { background: #fff; color: #000; }
+            .scanlines, .crt-flicker, #offline-banner, #toast-container, #scroll-bottom-btn,
+            .msg-action, .speaker-btn, .toolbar-btn, #model-filter, .model-item,
+            #vault-modal, #confirm-modal-overlay, #chat-input-area, header, aside { display: none !important; }
+            main { display: block !important; }
+            .glass-panel { background: none; border: none; box-shadow: none; }
+            #terminal-output { overflow: visible; max-height: none; }
+            .markdown-body pre { white-space: pre-wrap; word-break: break-word; }
+        }
+
+        @media (max-width:1023px) {
+            #sidebar-left, #sidebar-right { max-height: 35vh; }
+            #sidebar-left { border-top: 1px solid var(--border-subtle); padding-top: 8px; }
+            #chat-input-area { position: sticky; bottom: 0; z-index: 10; }
+        }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden selection:bg-green-500/30 selection:text-green-200 crt-flicker">
     <div class="scanlines" aria-hidden="true"></div>
-    <div id="offline-banner" class="offline-banner hidden fixed top-0 left-0 right-0 z-[10000] bg-red-900/90 backdrop-blur-md border-b border-red-500/30 px-4 py-2 text-center text-sm text-red-200 font-bold tracking-wider">⚠️ OFFLINE — Check your network connection</div>
+    <div id="offline-banner" class="offline-banner hidden fixed top-0 left-0 right-0 z-[var(--z-modal)] border-b px-4 py-2 text-center text-sm font-bold tracking-wider" style="background:rgba(30,10,5,0.95);border-color:rgba(255,180,71,0.2);color:var(--amber)"><span class="inline-flex items-center gap-2" data-icon="warning"> OFFLINE — Check your network connection</span></div>
     <div id="toast-container" role="status" aria-live="polite" aria-label="Notifications"></div>
-    <header class="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-black/60 backdrop-blur-md z-10">
+    <header class="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-deep)] z-[var(--z-header)] relative">
         <div class="flex items-center gap-4">
-            <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.8)]"></div>
-            <h1 class="text-xl font-bold tracking-widest text-white">COMMAND CENTER <span class="text-green-500 glow-text">v2.7</span></h1>
-            <span class="px-2 py-0.5 text-[10px] font-bold border border-green-500/30 text-green-400 rounded bg-green-500/5 tracking-wider">WAR CHEST A.I.</span>
-            <span class="px-2 py-0.5 text-[10px] font-bold border border-blue-500/30 text-blue-400 rounded bg-blue-500/5 tracking-wider">MULTI-MODEL DEPLOYMENT</span>
+            <div class="status-dot" aria-hidden="true"></div>
+            <h1 class="text-xl font-bold tracking-widest text-white" style="letter-spacing:.25em">COMMAND CENTER <span class="glow-text" style="color:var(--green-0)">v2.7</span></h1>
+            <span class="px-2 py-0.5 text-[10px] font-bold border rounded tracking-wider" style="border-color:var(--green-3);color:var(--green-1);background:var(--green-5)">WAR CHEST</span>
             <div class="hidden md:flex items-center gap-1 h-4 ml-4" id="token-flow"></div>
         </div>
-        <div class="flex items-center gap-4" role="toolbar" aria-label="Toolbar actions">
+        <div class="flex items-center gap-3" role="toolbar" aria-label="Toolbar actions">
             <div class="hidden sm:flex items-center gap-2" id="context-meter">
-                <span id="context-meter-label" class="text-[10px] text-green-400 font-bold font-mono"></span>
-                <div class="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden border border-gray-700/50">
-                    <div id="context-meter-bar" class="h-full transition-all duration-500 ease-out rounded-full" style="width:0%"></div>
+                <span id="context-meter-label" class="text-[10px] font-bold font-mono" style="color:var(--green-1)"></span>
+                <div class="w-24 h-1.5 rounded-full overflow-hidden border" style="background:#111;border-color:rgba(255,255,255,0.06)">
+                    <div id="context-meter-bar" class="context-meter-bar h-full rounded-full" style="width:0%;background:var(--green-0)"></div>
                 </div>
-                <span id="context-meter-pct" class="text-[10px] text-gray-500 font-mono min-w-[28px] text-right"></span>
+                <span id="context-meter-pct" class="context-meter-pct text-[10px] font-mono min-w-[28px] text-right" style="color:var(--text-tertiary)"></span>
             </div>
-            <button id="export-history-btn" class="px-2 py-2 text-xs bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700/50 rounded transition-all hover:border-green-400/50" title="Export chat history" aria-label="Export chat history">💾</button>
+            <button id="export-history-btn" class="icon-btn" title="Export chat history" aria-label="Export chat history" data-icon="download"></button>
             <input type="file" id="import-history-input" class="hidden" accept=".json">
-            <button id="import-history-btn" class="px-2 py-2 text-xs bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700/50 rounded transition-all hover:border-green-400/50" title="Import chat history" aria-label="Import chat history">📥</button>
-            <button id="tts-toggle-btn" class="px-2 py-2 text-xs bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700/50 rounded transition-all hover:border-green-400/50 hidden" title="Auto-speak responses" aria-label="Toggle auto-speak">🗣️</button>
-            <button id="audio-toggle-btn" class="px-3 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-green-500/50 rounded transition-all hover:border-green-400" title="Mute sounds" aria-label="Toggle audio on or off">🔊</button>
+            <button id="import-history-btn" class="icon-btn" title="Import chat history" aria-label="Import chat history" data-icon="upload"></button>
+            <button id="tts-toggle-btn" class="icon-btn hidden" title="Auto-speak responses" aria-label="Toggle auto-speak" data-icon="speaker"></button>
+            <button id="audio-toggle-btn" class="icon-btn" title="Mute sounds" aria-label="Toggle audio on or off" style="border-color:var(--green-2);color:var(--green-0)" data-icon="speaker"></button>
         </div>
     </header>
-    <main class="flex-1 grid grid-cols-12 gap-4 p-4 overflow-hidden relative z-10">
-        <aside class="col-span-12 lg:col-span-3 flex flex-col gap-4 overflow-y-auto order-3 lg:order-1" role="region" aria-label="System configuration panel">
+    <main class="flex-1 grid grid-cols-12 gap-4 p-4 overflow-hidden relative z-[var(--z-sidebar)]" style="max-width:1600px;margin:0 auto;width:100%">
+        <aside id="sidebar-left" class="col-span-12 lg:col-span-3 flex flex-col gap-4 overflow-y-auto order-3 lg:order-1 max-lg:max-h-[40vh] max-lg:border-t max-lg:border-[var(--border-subtle)] max-lg:pt-3" role="region" aria-label="System configuration panel">
             <div class="glass-panel rounded-lg p-4">
-                <h2 class="text-xs font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-2 mb-1">⚙️ System</h2>
-                <button id="vault-btn" class="w-full text-left px-3 py-2.5 rounded bg-gray-800/30 hover:bg-gray-700/50 border border-gray-700/50 text-sm flex items-center gap-3 transition-all group" aria-label="Open API keys and vault configuration"><span class="text-lg group-hover:scale-110 transition-transform">🔑</span><div><div class="font-bold text-gray-300">API Keys &amp; Vault</div><div class="text-[10px] text-gray-500">Manage external routing</div></div></button>
-                <button id="wipe-btn" class="w-full text-left px-3 py-2.5 rounded bg-red-950/30 hover:bg-red-900/40 border border-red-900/50 text-red-400 text-sm flex items-center gap-3 transition-all mt-2 group" aria-label="Wipe all local data"><span class="text-lg group-hover:scale-110 transition-transform">🗑️</span><div><div class="font-bold">Wipe System</div><div class="text-[10px] text-red-400/60">Clear all local data</div></div></button>
+                <h2 class="text-xs font-bold uppercase tracking-widest border-b pb-2 mb-1" style="color:var(--text-secondary);border-color:rgba(255,255,255,0.06)"><span class="inline-flex items-center gap-1.5" data-icon="gear"> System</span></h2>
+                <button id="vault-btn" class="w-full text-left px-3 py-2.5 rounded flex items-center gap-3 transition-all group" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.05)" aria-label="Open API keys and vault configuration"><span class="group-hover:scale-110 transition-transform" data-icon="key"></span><div><div class="font-bold" style="color:var(--text-primary)">API Keys &amp; Vault</div><div class="text-[10px]" style="color:var(--text-tertiary)">Manage external routing</div></div></button>
+                <button id="wipe-btn" class="w-full text-left px-3 py-2.5 rounded flex items-center gap-3 transition-all mt-2 group" style="background:rgba(180,71,0,0.08);border:1px solid rgba(180,71,0,0.2);color:var(--amber)" aria-label="Wipe all local data"><span class="group-hover:scale-110 transition-transform" data-icon="trash"></span><div><div class="font-bold">Wipe System</div><div class="text-[10px]" style="opacity:0.6">Clear all local data</div></div></button>
             </div>
-            <div class="glass-panel rounded-lg p-4 flex-1 flex flex-col min-h-0">
+            <div class="glass-panel rounded-lg p-4 flex-1 flex flex-col min-h-0" style="min-height:200px">
                 <div class="flex-[2] flex flex-col min-h-0 mb-3">
-                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-2 mb-3 flex items-center justify-between shrink-0"><span>🧠 System Prompt</span><span id="prompt-chars" class="text-gray-600 font-normal text-[10px] font-mono">0c</span></h2>
-                    <textarea id="prompt-editor" class="w-full flex-1 min-h-0 bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono resize-none focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all placeholder-gray-600" placeholder="Enter the system prompt that sets the AI's behavior...">You are an elite tactical AI operating within the War Chest Command Center. Be concise, highly accurate, and structure outputs beautifully using markdown.</textarea>
+                    <h2 class="text-xs font-bold uppercase tracking-widest border-b pb-2 mb-3 flex items-center justify-between shrink-0" style="color:var(--text-secondary);border-color:rgba(255,255,255,0.06)"><span class="inline-flex items-center gap-1.5" data-icon="doc"> System Prompt</span><span id="prompt-chars" class="font-normal text-[10px] font-mono" style="color:var(--text-tertiary)">0c</span></h2>
+                    <textarea id="prompt-editor" class="w-full flex-1 min-h-0 rounded px-3 py-2 text-sm text-white font-mono resize-none focus:outline-none transition-all placeholder-gray-600" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" placeholder="Enter the system prompt that sets the AI's behavior..." aria-describedby="prompt-chars">You are an elite tactical AI operating within the War Chest Command Center. Be concise, highly accurate, and structure outputs beautifully using markdown.</textarea>
                     <div class="flex gap-2 mt-2 shrink-0">
-                        <button id="apply-prompt-btn" class="flex-1 px-3 py-1.5 text-xs font-bold bg-green-700/40 hover:bg-green-600/60 border border-green-500/30 text-green-400 rounded transition-all" aria-label="Apply system prompt">Apply Prompt</button>
-                        <button id="reset-prompt-btn" class="px-3 py-1.5 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700 text-gray-400 rounded transition-all" aria-label="Reset system prompt to default">Reset</button>
+                        <button id="apply-prompt-btn" class="flex-1 px-3 py-1.5 text-xs font-bold rounded transition-all" style="background:var(--green-5);border:1px solid var(--green-3);color:var(--green-1)" aria-label="Apply system prompt">Apply Prompt</button>
+                        <button id="reset-prompt-btn" class="px-3 py-1.5 text-xs font-bold rounded transition-all" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-secondary)" aria-label="Reset system prompt to default">Reset</button>
                     </div>
                 </div>
-                <div class="flex-1 border-t border-gray-800 pt-3 flex flex-col min-h-0">
-                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 shrink-0">📄 Reference Doc</h2>
-                    <div id="doc-drop-zone" class="flex-1 min-h-0 relative border-2 border-dashed border-gray-700 rounded-lg p-3 text-center cursor-pointer transition-all hover:border-green-500/30 text-gray-500 text-xs font-mono">
-                        <div id="doc-empty-state"><div class="text-lg mb-1">📁</div><div>Drop a .md or .txt file here</div><div class="text-[9px] text-gray-600 mt-1">or click to browse</div></div>
-                        <div id="doc-drop-overlay" class="hidden absolute inset-0 bg-green-900/20 border-2 border-green-500/50 rounded-lg items-center justify-center text-green-400 font-bold z-10">📄 Drop to attach</div>
-                        <div id="doc-loaded-state" class="hidden flex items-center gap-2 text-left"><span class="text-lg">📄</span><span id="doc-filename" class="text-green-400 font-bold flex-1 truncate"></span><span id="doc-filesize" class="text-[10px] text-gray-500"></span><span id="doc-chunks" class="text-[9px] text-gray-600 ml-1"></span><button id="doc-remove-btn" class="text-red-400 hover:text-red-300 text-lg leading-none px-1">&times;</button></div>
+                <div class="flex-1 border-t pt-3 flex flex-col min-h-0" style="border-color:rgba(255,255,255,0.06)">
+                    <h2 class="text-xs font-bold uppercase tracking-widest mb-2 shrink-0" style="color:var(--text-secondary)"><span class="inline-flex items-center gap-1.5" data-icon="doc"> Reference Doc</span></h2>
+                    <div id="doc-drop-zone" class="flex-1 min-h-0 relative border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-all text-xs font-mono" style="border-color:rgba(255,255,255,0.12);color:var(--text-tertiary)" role="button" tabindex="0" aria-label="Drop or click to add reference document">
+                        <div id="doc-empty-state"><div class="mb-1" data-icon="folder"></div><div>Drop a .md or .txt file here</div><div class="text-[9px] mt-1" style="color:var(--text-tertiary)">or click to browse</div></div>
+                        <div id="doc-drop-overlay" class="hidden absolute inset-0 rounded-lg items-center justify-center font-bold z-10" style="background:rgba(0,255,65,0.08);border:2px solid var(--green-2);color:var(--green-1)"><span class="inline-flex items-center gap-1.5" data-icon="doc"> Drop to attach</span></div>
+                        <div id="doc-loaded-state" class="items-center gap-2 text-left"><span data-icon="doc"></span><span id="doc-filename" class="font-bold flex-1 truncate" style="color:var(--green-1)"></span><span id="doc-filesize" class="text-[10px]" style="color:var(--text-tertiary)"></span><span id="doc-chunks" class="text-[9px] ml-1" style="color:var(--text-tertiary)"></span><button id="doc-remove-btn" class="text-lg leading-none px-1" style="color:var(--amber)">&times;</button></div>
                     </div>
                     <div id="rag-controls" class="hidden flex items-center gap-2 mt-1.5 text-[10px]">
-                        <label class="flex items-center gap-1.5 cursor-pointer text-gray-500 hover:text-gray-300 transition-colors">
-                            <input type="checkbox" id="rag-toggle" class="accent-green-500 w-3 h-3" checked>
+                        <label class="flex items-center gap-1.5 cursor-pointer transition-colors" style="color:var(--text-tertiary)">
+                            <input type="checkbox" id="rag-toggle" class="w-3 h-3" style="accent-color:var(--green-0)" checked>
                             RAG
                         </label>
-                        <span id="rag-chunk-count" class="text-gray-600"></span>
+                        <span id="rag-chunk-count" style="color:var(--text-tertiary)"></span>
                     </div>
                     <input type="file" id="doc-file-input" accept=".md,.txt" class="hidden">
                 </div>
-                <div class="mt-auto pt-3 border-t border-gray-800 shrink-0">
-                    <div class="flex justify-between text-[10px] text-gray-500 font-mono"><span>⚡ <span id="last-latency">0ms</span></span><span>💬 <span id="msg-count">0</span></span></div>
+                <div class="mt-auto pt-3 border-t shrink-0" style="border-color:rgba(255,255,255,0.06)">
+                    <div class="flex justify-between text-[10px] font-mono" style="color:var(--text-tertiary)"><span class="inline-flex items-center gap-1" data-icon="bolt"> <span id="last-latency">0ms</span></span><span class="inline-flex items-center gap-1" data-icon="chat"> <span id="msg-count">0</span></span></div>
                 </div>
             </div>
         </aside>
-        <section class="col-span-12 lg:col-span-6 flex flex-col glass-panel rounded-lg overflow-hidden border-gray-800 order-1 lg:order-2 relative" role="region" aria-label="Chat terminal">
-            <div class="px-4 py-3 bg-gray-900/80 border-b border-gray-800 flex items-center justify-between">
+        <section class="col-span-12 lg:col-span-6 flex flex-col glass-panel rounded-lg overflow-hidden order-1 lg:order-2 relative" role="region" aria-label="Chat terminal" style="min-height:300px">
+            <div class="px-4 py-3 panel-header flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-3">
-                    <canvas id="ai-face" width="32" height="32" class="w-8 h-8 md:w-10 md:h-10" style="image-rendering: pixelated; box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);"></canvas>
-                    <span class="text-xs font-bold text-gray-400 tracking-wider flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span id="terminal-status">▼ AWAITING INPUT</span></span>
+                    <canvas id="ai-face" width="32" height="32" class="w-8 h-8 md:w-10 md:h-10" style="image-rendering:pixelated;box-shadow:0 0 10px rgba(0,255,65,0.3)" aria-hidden="true"></canvas>
+                    <span class="text-xs font-bold tracking-wider flex items-center gap-2" style="color:var(--text-secondary)"><span class="status-dot inline-block" id="status-dot"></span><span id="terminal-status">▼ AWAITING INPUT</span></span>
                 </div>
                 <div class="flex items-center gap-2">
-                    <span id="terminal-system-header" class="text-[10px] text-green-500/60 font-bold tracking-widest">⚡ SYSTEM INITIALIZED</span>
-                    <div class="flex gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-500/40"></div><div class="w-2.5 h-2.5 rounded-full bg-yellow-500/40"></div><div class="w-2.5 h-2.5 rounded-full bg-green-500/40"></div></div>
+                    <span id="terminal-system-header" class="text-[10px] font-bold tracking-widest inline-flex items-center gap-1" style="color:var(--green-3)" data-icon="bolt"> SYSTEM INITIALIZED</span>
+                    <div class="flex gap-1.5" aria-hidden="true"><div class="w-2 h-2 rounded-full" style="background:rgba(255,100,100,0.3)"></div><div class="w-2 h-2 rounded-full" style="background:rgba(255,200,50,0.3)"></div><div class="w-2 h-2 rounded-full" style="background:rgba(0,255,65,0.3)"></div></div>
                 </div>
             </div>
-            <div id="terminal-output" class="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3 text-sm bg-black/20" role="log" aria-live="polite" aria-label="Chat messages">
-                <div class="text-gray-400 flex items-center gap-1">Awaiting tactical input...<span class="blink text-green-500">█</span></div>
+            <div id="terminal-output" class="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3 text-sm" style="background:rgba(0,0,0,0.15)" role="log" aria-live="off" aria-label="Chat messages">
+                <div style="color:var(--text-secondary)" class="flex items-center gap-1">Awaiting tactical input...<span class="blink stream-cursor" style="color:var(--green-0)">█</span></div>
+                <div id="scroll-bottom-btn" class="px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border flex items-center gap-1.5 transition-all" style="position:sticky;bottom:4px;float:right;clear:both;background:rgba(0,255,65,0.25);border-color:var(--green-3);color:var(--green-0);opacity:0;pointer-events:none;z-index:1" data-icon="chevronDown"></div>
             </div>
-            <div class="p-4 border-t border-gray-800 bg-gray-900/60 relative" id="chat-input-area">
-                <div id="image-drop-overlay" class="absolute inset-0 z-20 bg-black/85 border-2 border-dashed border-green-500/40 rounded-lg items-center justify-center backdrop-blur-[2px]"><span class="text-green-400 font-bold text-sm flex items-center gap-2">📸 Drop image here<span class="text-gray-500 font-normal text-[10px]">JPG, PNG, GIF, WebP · max 20MB</span></span></div>
-                <div id="active-model-bar" class="hidden items-center gap-2 mb-2 px-3 py-1.5 bg-gray-800/40 rounded border border-gray-700/40 text-[10px]"><span class="text-gray-500">Active:</span><span id="active-model-name" class="text-green-400 font-bold"></span><span id="active-model-extra" class="text-gray-500"></span></div>
-                <div id="attachment-preview" class="hidden items-center gap-2 mb-2 px-3 py-2 bg-gray-800/40 rounded border border-gray-700/50 text-xs"><img id="attach-thumb" class="w-8 h-8 rounded object-cover border border-gray-600"><span id="attach-name" class="text-gray-300 flex-1 truncate"></span><span class="text-[10px] text-gray-500">attached</span><button id="remove-attach-btn" class="text-red-400 hover:text-red-300 text-lg leading-none px-1">&times;</button></div>
+            <div class="p-4 border-t panel-header relative max-lg:sticky max-lg:bottom-0 max-lg:z-10" id="chat-input-area">
+                <div id="image-drop-overlay" class="absolute inset-0 z-20 rounded-lg items-center justify-center" style="display:none;background:rgba(0,0,0,0.85);border:2px dashed var(--green-2)"><span class="font-bold text-sm inline-flex items-center gap-2" style="color:var(--green-1)" data-icon="photo"> Drop image here <span class="font-normal text-[10px]" style="color:var(--text-tertiary)">JPG, PNG, GIF, WebP · max 20MB</span></span></div>
+                <div id="active-model-bar" class="hidden items-center gap-2 mb-2 px-3 py-1.5 rounded text-[10px]" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.05)"><span style="color:var(--text-tertiary)">Active:</span><span id="active-model-name" class="font-bold" style="color:var(--green-1)"></span><span id="active-model-extra" style="color:var(--text-tertiary)"></span></div>
+                <div id="attachment-preview" class="hidden items-center gap-2 mb-2 px-3 py-2 rounded text-xs" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)"><img id="attach-thumb" class="w-8 h-8 rounded object-cover border border-gray-600" alt=""><span id="attach-name" class="flex-1 truncate" style="color:var(--text-primary)"></span><span id="attach-size" class="text-[10px]" style="color:var(--text-tertiary)"></span><span id="attach-dims" class="text-[10px]" style="color:var(--text-tertiary)"></span><span class="text-[10px]" style="color:var(--text-tertiary)">attached</span><button id="remove-attach-btn" class="text-lg leading-none px-1" style="color:var(--amber)">&times;</button></div>
                 <div class="flex gap-2 input-row">
-                    <button id="attach-btn" class="px-3 py-2.5 rounded bg-gray-800/50 hover:bg-gray-700 border border-gray-700 text-gray-400 transition-colors text-lg" title="Attach image" aria-label="Attach image">📎</button>
-                    <textarea id="terminal-input" placeholder="Enter command or message..." class="flex-1 bg-black/60 border border-gray-700 rounded px-4 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all placeholder-gray-600 font-mono resize-none overflow-y-auto" rows="1" aria-label="Message input"></textarea>
-                    <button id="send-btn" class="px-5 py-2.5 rounded bg-green-600 hover:bg-green-500 text-black font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(22,163,74,0.3)] hover:shadow-[0_0_20px_rgba(22,163,74,0.5)]" aria-label="Send message">SEND ❯</button>
-                    <button id="stop-btn" class="hidden px-4 py-2.5 rounded bg-red-700 hover:bg-red-600 text-white font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(220,38,38,0.3)]" aria-label="Stop streaming">⏹ STOP</button>
+                    <button id="attach-btn" class="icon-btn" title="Attach image" aria-label="Attach image" data-icon="paperclip"></button>
+                    <textarea id="terminal-input" placeholder="Enter command or message..." class="flex-1 rounded px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--green-2)] focus:ring-1 focus:ring-[var(--green-4)] transition-all placeholder-gray-600 font-mono resize-none overflow-y-auto" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" rows="1" aria-label="Message input"></textarea>
+                    <button id="send-btn" class="px-5 py-2.5 rounded font-bold text-sm transition-all flex items-center gap-2" style="background:rgba(0,255,65,0.15);color:var(--green-0);border:1px solid var(--green-3);box-shadow:0 0 12px rgba(0,255,65,0.1)" aria-label="Send message">SEND <span data-icon="chevronDown" style="transform:rotate(-90deg)"></span></button>
+                    <button id="stop-btn" class="hidden px-4 py-2.5 rounded font-bold text-sm transition-all flex items-center gap-2" style="background:rgba(200,50,0,0.15);color:var(--amber);border:1px solid rgba(200,100,0,0.3)" aria-label="Stop streaming" data-icon="stop"> STOP</button>
                 </div>
                 <div class="flex items-center gap-1.5 mt-1.5 toolbar-row">
-                    <button id="voice-btn" class="toolbar-btn" title="Voice input" aria-label="Voice input">🎤</button>
-                    <span class="w-px h-3 bg-gray-700/50"></span>
-                    <span id="rag-indicator" class="toolbar-indicator hidden">📄 RAG</span>
+                    <button id="voice-btn" class="toolbar-btn" title="Voice input" aria-label="Voice input" data-icon="mic"></button>
+                    <span class="w-px h-3" style="background:rgba(255,255,255,0.06)"></span>
+                    <span id="rag-indicator" class="toolbar-indicator hidden" data-icon="doc"> RAG</span>
                     <div class="flex-1"></div>
-                    <button id="export-btn" class="toolbar-btn" title="Export conversation as markdown" aria-label="Export chat">⎆</button>
+                    <button id="export-btn" class="toolbar-btn" title="Export conversation as markdown" aria-label="Export chat" data-icon="download"></button>
                 </div>
                 <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden">
                 <div class="flex justify-between items-center mt-1.5">
-                    <div id="input-chars" class="text-[10px] text-gray-600">0 characters</div>
-                    <div class="flex items-center gap-2"><span id="active-model-indicator" class="text-[10px] text-gray-600 hidden">Model: <span id="active-model-indicator-name" class="text-green-400 font-bold"></span></span><span class="text-[10px] text-gray-500">Enter to send · Shift+Enter for newline</span></div>
+                    <div id="input-chars" class="text-[10px]" style="color:var(--text-tertiary)">0 characters</div>
+                    <div class="flex items-center gap-2"><span id="active-model-indicator" class="text-[10px] hidden" style="color:var(--text-tertiary)">Model: <span id="active-model-indicator-name" class="font-bold" style="color:var(--green-1)"></span></span><span class="text-[10px]" style="color:var(--text-tertiary)">Enter to send · Shift+Enter for newline</span></div>
                 </div>
             </div>
-            <button id="scroll-bottom-btn" class="px-3 py-1.5 rounded-full bg-green-700/70 hover:bg-green-600 text-black text-xs font-bold shadow-lg border border-green-500/30 flex items-center gap-1.5 transition-all" aria-label="Scroll to bottom">⬇</button>
         </section>
-        <aside class="col-span-12 lg:col-span-3 flex flex-col glass-panel rounded-lg overflow-hidden border-gray-800 order-2 lg:order-3" role="region" aria-label="Model fleet selection">
-            <div class="px-4 py-3 bg-gray-900/80 border-b border-gray-800">
-                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">🧠 🎯 Primary Fleet Selection</h2>
+        <aside id="sidebar-right" class="col-span-12 lg:col-span-3 flex flex-col glass-panel rounded-lg overflow-hidden order-2 lg:order-3 max-lg:max-h-[40vh] max-lg:border-t max-lg:border-[var(--border-subtle)] max-lg:pt-0" role="region" aria-label="Model fleet selection">
+            <div class="px-4 py-3 panel-header">
+                <h2 class="text-xs font-bold uppercase tracking-widest flex items-center gap-2" style="color:var(--text-secondary)" data-icon="cpu"> Fleet Selection</h2>
                 <div id="filter-bar" class="flex flex-wrap gap-1 mt-2" role="group" aria-label="Model provider filter">
-                    <button data-filter="all" class="filter-btn active px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Show all models">All</button>
-                    <button data-filter="groq" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter Groq models">🟢 Groq</button>
-                    <button data-filter="openrouter" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter OpenRouter models">🟠 OR</button>
-                    <button data-filter="google" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter Google models">🔵 Google</button>
-                    <button data-filter="nvidia" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter NVIDIA models">🟣 NVIDIA</button>
-                    <span class="w-px h-4 bg-gray-700/50 self-center mx-0.5"></span>
-                    <button data-cap-filter="vision" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded-full bg-gray-800/30 text-gray-500 uppercase tracking-wider hover:border-cyan-500/30 hover:text-cyan-400 transition-all" aria-label="Filter vision models">👁 Vision</button>
-                    <button data-cap-filter="tools" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded-full bg-gray-800/30 text-gray-500 uppercase tracking-wider hover:border-green-500/30 hover:text-green-400 transition-all" aria-label="Filter models with tools">🔧 Tools</button>
-                    <button data-cap-filter="fast" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded-full bg-gray-800/30 text-gray-500 uppercase tracking-wider hover:border-yellow-500/30 hover:text-yellow-400 transition-all" aria-label="Filter fast models">⚡ Fast</button>
+                    <button data-filter="all" class="filter-btn active px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:var(--green-5);border-color:var(--green-3);color:var(--green-1)">All</button>
+                    <button data-filter="groq" class="filter-btn px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)"><span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:var(--green-0)"></span>Groq</span></button>
+                    <button data-filter="openrouter" class="filter-btn px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)"><span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:var(--amber)"></span>OR</span></button>
+                    <button data-filter="google" class="filter-btn px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)"><span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:var(--green-2)"></span>Google</span></button>
+                    <button data-filter="nvidia" class="filter-btn px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)"><span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:rgba(200,200,255,0.5)"></span>NVIDIA</span></button>
+                    <span class="w-px h-4 self-center mx-0.5" style="background:rgba(255,255,255,0.06)"></span>
+                    <button data-cap-filter="vision" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border rounded-full uppercase tracking-wider transition-all" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)" data-icon="eye"> Vision</button>
+                    <button data-cap-filter="tools" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border rounded-full uppercase tracking-wider transition-all" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)" data-icon="wrench"> Tools</button>
+                    <button data-cap-filter="fast" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border rounded-full uppercase tracking-wider transition-all" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)" data-icon="bolt"> Fast</button>
                 </div>
             </div>
-            <input type="text" id="model-filter" placeholder="Filter models..." class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all placeholder-gray-600 mb-2" aria-label="Filter model list">
-            <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1" id="model-list" role="listbox" aria-label="Available models"></div>
-            <div class="p-4 border-t border-gray-800 bg-gray-900/60">
-                <div class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">📊 Model Profile</div>
-                <div id="model-profile" class="text-xs text-gray-400 font-mono leading-relaxed">Select a model from the fleet to view detailed telemetry and capabilities...</div>
+            <input type="text" id="model-filter" placeholder="Filter models..." class="w-full rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--green-2)] focus:ring-1 focus:ring-[var(--green-4)] transition-all placeholder-gray-600 mb-2" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" aria-label="Filter model list">
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1" id="model-list" role="listbox" aria-label="Available models" tabindex="0"></div>
+            <div class="p-4 border-t panel-header">
+                <div class="text-[10px] font-bold uppercase tracking-wider mb-2 inline-flex items-center gap-1" style="color:var(--text-tertiary)" data-icon="chart"> Model Profile</div>
+                <div id="model-profile" class="text-xs font-mono leading-relaxed" style="color:var(--text-secondary)">Select a model from the fleet to view detailed telemetry and capabilities...</div>
             </div>
         </aside>
     </main>
-    <div id="vault-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300">
-        <div class="glass-panel w-full max-w-lg rounded-lg border border-green-500/20 shadow-2xl shadow-green-900/10 transform transition-all scale-100">
-            <div class="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/80 rounded-t-lg">
-                <h3 class="text-base font-bold text-green-400 flex items-center gap-2 tracking-wider"><span>🔑</span> CONFIG.YAML // SECURE VAULT</h3>
-                <button id="vault-close-btn" class="text-gray-500 hover:text-white transition-colors text-xl hover:rotate-90 duration-300" aria-label="Close vault">✕</button>
+    <div id="vault-modal" class="hidden fixed inset-0 flex items-center justify-center p-4 transition-opacity duration-300" style="background:rgba(0,0,0,0.92);z-index:var(--z-modal)">
+        <div class="glass-panel w-full max-w-lg rounded-lg" style="border-color:var(--green-4);box-shadow:0 0 40px rgba(0,255,65,0.06)">
+            <div class="px-6 py-4 border-b panel-header flex items-center justify-between rounded-t-lg">
+                <h3 class="text-base font-bold flex items-center gap-2 tracking-wider" style="color:var(--green-1)" data-icon="key"> CONFIG.YAML // SECURE VAULT</h3>
+                <button id="vault-close-btn" class="icon-btn" style="border:none;background:none;padding:4px" aria-label="Close vault" data-icon="xMark"></button>
             </div>
             <div class="p-6 space-y-4">
-                <div class="flex items-start gap-3 p-3 rounded bg-yellow-900/10 border border-yellow-500/20"><span class="text-yellow-500 mt-0.5">⚠️</span><p class="text-xs text-yellow-500/80 leading-relaxed">INFO: Keys are stored locally in your browser's localStorage. Required for external API routing. Never share these keys.</p></div>
+                <div class="flex items-start gap-3 p-3 rounded" style="background:rgba(255,180,71,0.06);border:1px solid rgba(255,180,71,0.15)"><span class="mt-0.5" data-icon="warning" style="color:var(--amber)"></span><p class="text-xs leading-relaxed" style="color:var(--amber-dim)">INFO: Keys are stored locally in your browser's localStorage. Required for external API routing. Never share these keys.</p></div>
                 <div class="space-y-4">
-                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">GROQ_API_KEY <span class="text-green-500 font-normal">Custom Provider</span></label><div class="relative"><input type="password" id="key-groq" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-green-500 focus:ring-1 focus:ring-green-500/20 outline-none transition-all font-mono pr-8" placeholder="gsk_..." aria-label="Groq API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
-                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">OPENROUTER_API_KEY <span class="text-blue-500 font-normal">Fallback</span></label><div class="relative"><input type="password" id="key-openrouter" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono pr-8" placeholder="sk-or-v1-..." aria-label="OpenRouter API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
-                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">GOOGLE_API_KEY <span class="text-red-500 font-normal">Vision / Fallback</span></label><div class="relative"><input type="password" id="key-google" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-red-500 focus:ring-1 focus:ring-red-500/20 outline-none transition-all font-mono pr-8" placeholder="AIza..." aria-label="Google API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
-                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">NVIDIA_API_KEY <span class="text-purple-500 font-normal">Fallback</span></label><div class="relative"><input type="password" id="key-nvidia" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all font-mono pr-8" placeholder="nvapi-..." aria-label="NVIDIA API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
+                    <div class="group"><label class="block text-xs font-bold mb-1.5 flex justify-between" style="color:var(--text-secondary)">GROQ_API_KEY <span style="color:var(--green-1)" class="font-normal">Custom Provider</span></label><div class="relative"><input type="password" id="key-groq" class="w-full rounded px-3 py-2.5 text-sm text-white focus:outline-none transition-all font-mono pr-8" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" placeholder="gsk_..." aria-label="Groq API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 px-1 transition-colors" style="color:var(--text-tertiary)" aria-label="Toggle API key visibility" aria-pressed="false" data-icon="eye"></button></div></div>
+                    <div class="group"><label class="block text-xs font-bold mb-1.5 flex justify-between" style="color:var(--text-secondary)">OPENROUTER_API_KEY <span style="color:var(--amber)" class="font-normal">Fallback</span></label><div class="relative"><input type="password" id="key-openrouter" class="w-full rounded px-3 py-2.5 text-sm text-white focus:outline-none transition-all font-mono pr-8" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" placeholder="sk-or-v1-..." aria-label="OpenRouter API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 px-1 transition-colors" style="color:var(--text-tertiary)" aria-label="Toggle API key visibility" aria-pressed="false" data-icon="eye"></button></div></div>
+                    <div class="group"><label class="block text-xs font-bold mb-1.5 flex justify-between" style="color:var(--text-secondary)">GOOGLE_API_KEY <span style="color:var(--green-2)" class="font-normal">Vision / Fallback</span></label><div class="relative"><input type="password" id="key-google" class="w-full rounded px-3 py-2.5 text-sm text-white focus:outline-none transition-all font-mono pr-8" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" placeholder="AIza..." aria-label="Google API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 px-1 transition-colors" style="color:var(--text-tertiary)" aria-label="Toggle API key visibility" aria-pressed="false" data-icon="eye"></button></div></div>
+                    <div class="group"><label class="block text-xs font-bold mb-1.5 flex justify-between" style="color:var(--text-secondary)">NVIDIA_API_KEY <span style="color:rgba(200,200,255,0.6)" class="font-normal">Fallback</span></label><div class="relative"><input type="password" id="key-nvidia" class="w-full rounded px-3 py-2.5 text-sm text-white focus:outline-none transition-all font-mono pr-8" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" placeholder="nvapi-..." aria-label="NVIDIA API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 px-1 transition-colors" style="color:var(--text-tertiary)" aria-label="Toggle API key visibility" aria-pressed="false" data-icon="eye"></button></div></div>
                 </div>
                 <div class="flex gap-3 mt-6">
-                    <button id="save-keys-btn" class="flex-1 py-3 bg-green-600 hover:bg-green-500 text-black font-bold rounded transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(22,163,74,0.2)] hover:shadow-[0_0_25px_rgba(22,163,74,0.4)]" aria-label="Save API keys"><span>💾</span> COMMIT CONFIG</button>
-                    <button id="load-env-btn" class="px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-green-500/50 text-gray-300 font-bold rounded transition-all text-sm flex items-center gap-2" aria-label="Load API keys from .env file" title="Select your .env file (Cmd+Shift+. to show hidden files)"><span>📂</span> .env</button>
+                    <button id="save-keys-btn" class="flex-1 py-3 font-bold rounded transition-all flex items-center justify-center gap-2" style="background:var(--green-5);border:1px solid var(--green-3);color:var(--green-0);box-shadow:0 0 15px rgba(0,255,65,0.06)" aria-label="Save API keys" data-icon="check"> COMMIT CONFIG</button>
+                    <button id="load-env-btn" class="px-4 py-3 rounded transition-all text-sm flex items-center gap-2" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-secondary)" aria-label="Load API keys from .env file" title="Select your .env file (Cmd+Shift+. to show hidden files)" data-icon="upload"> .env</button>
                 </div>
                 <input type="file" id="env-file-input" class="hidden">
             </div>
         </div>
     </div>
-    <div id="confirm-modal-overlay" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
-        <div class="modal-box glass-panel w-full max-w-md rounded-lg border border-green-500/20 shadow-2xl shadow-green-900/10">
-            <div class="px-6 py-4 border-b border-gray-800 bg-gray-900/80 rounded-t-lg"><h3 id="confirm-modal-title" class="text-base font-bold text-green-400 tracking-wider">Confirm Action</h3></div>
+    <div id="confirm-modal-overlay" class="hidden fixed inset-0 flex items-center justify-center p-4" style="background:rgba(0,0,0,0.9);z-index:var(--z-overlay)" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal-box glass-panel w-full max-w-md rounded-lg" style="border-color:var(--green-4)">
+            <div class="px-6 py-4 border-b panel-header rounded-t-lg"><h3 id="confirm-modal-title" class="text-base font-bold tracking-wider" style="color:var(--green-1)">Confirm Action</h3></div>
             <div class="p-6 space-y-4">
-                <p id="confirm-modal-message" class="text-sm text-gray-300 leading-relaxed"></p>
-                <div id="confirm-modal-typed-section" class="hidden"><label class="block text-xs font-bold text-gray-400 mb-1.5">Type <span id="confirm-modal-typed-word" class="text-red-400 font-mono"></span> to confirm:</label><input type="text" id="confirm-modal-input" class="w-full bg-black/60 border border-red-700 rounded px-3 py-2.5 text-sm text-white focus:border-red-500 focus:ring-1 focus:ring-red-500/20 outline-none transition-all" placeholder=""></div>
+                <p id="confirm-modal-message" class="text-sm leading-relaxed" style="color:var(--text-primary)"></p>
+                <div id="confirm-modal-typed-section" style="display:none"><label class="block text-xs font-bold mb-1.5" style="color:var(--text-secondary)">Type <span id="confirm-modal-typed-word" class="font-mono" style="color:var(--amber)"></span> to confirm:</label><input type="text" id="confirm-modal-input" class="w-full rounded px-3 py-2.5 text-sm text-white focus:outline-none transition-all" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,180,71,0.3)" placeholder="" aria-label="Type confirmation word"></div>
                 <div class="flex gap-3 justify-end">
-                    <button id="confirm-modal-cancel" class="px-4 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700 text-gray-400 rounded transition-all">Cancel</button>
-                    <button id="confirm-modal-ok" class="px-4 py-2 text-xs font-bold bg-green-700/40 hover:bg-green-600/60 border border-green-500/30 text-green-400 rounded transition-all">Confirm</button>
+                    <button id="confirm-modal-cancel" class="px-4 py-2 text-xs font-bold rounded transition-all" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:var(--text-secondary)">Cancel</button>
+                    <button id="confirm-modal-ok" class="px-4 py-2 text-xs font-bold rounded transition-all" style="background:var(--green-5);border:1px solid var(--green-3);color:var(--green-1)">Confirm</button>
                 </div>
             </div>
         </div>
     </div>
 <script src="models.js"></script>
 <script src="rag.js"></script>
+<script src="icons.js"></script>
 <script src="sound.js"></script>
 <script src="avatar.js"></script>
 <script src="utils.js"></script>
