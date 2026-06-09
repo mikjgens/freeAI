@@ -935,7 +935,17 @@ const App = (() => {
         document.getElementById('chat-input-area').classList.toggle('input-expanded', nh > 40);
         try { sessionStorage.setItem(STORAGE_KEY_DRAFT, ta.value); } catch (e) { }
         const chars = document.getElementById('input-chars');
-        if (chars) chars.textContent = ta.value.length + ' characters';
+        if (chars) {
+            const len = ta.value.length;
+            if (len === 0) {
+                chars.textContent = '0c';
+                chars.classList.remove('over-limit');
+            } else {
+                const tok = Math.ceil(len / 3.5);
+                chars.textContent = len + 'c · ~' + tok + 't';
+                chars.classList.toggle('over-limit', tok > 500);
+            }
+        }
     }
 
     function handlePaste(e) {
@@ -1367,6 +1377,19 @@ const App = (() => {
 
         const deltaBtn = document.getElementById('delta-toggle-btn');
         if (deltaBtn) deltaBtn.addEventListener('click', toggleDeltaMode);
+
+        const kgBtn = document.getElementById('kg-collapse-btn');
+        if (kgBtn) {
+            kgBtn.addEventListener('click', () => {
+                const rail = document.getElementById('kg-rail-wrapper');
+                if (!rail) return;
+                const isOpen = kgBtn.classList.contains('kg-open');
+                kgBtn.classList.toggle('kg-open', !isOpen);
+                kgBtn.setAttribute('aria-expanded', String(!isOpen));
+                rail.classList.toggle('kg-collapsed', isOpen);
+                playSound('toggle');
+            });
+        }
     }
 
     function replaceIcons() {

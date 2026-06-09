@@ -34,8 +34,8 @@ const DomLayer = (() => {
         const sendBtn = document.getElementById('send-btn');
         const stopBtn = document.getElementById('stop-btn');
         if (!sendBtn || !stopBtn) return;
-        if (streaming) { sendBtn.classList.add('hidden'); stopBtn.classList.remove('hidden'); }
-        else { sendBtn.classList.remove('hidden'); stopBtn.classList.add('hidden'); }
+        sendBtn.classList.toggle('btn-invisible', streaming);
+        stopBtn.classList.toggle('btn-invisible', !streaming);
     }
 
     function updateContextMeter() {
@@ -798,20 +798,32 @@ const DomLayer = (() => {
     let _graphSim = null;
 
     function renderKnowledgeGraph(graph) {
-        const wrapper = document.getElementById('kg-rail-wrapper');
+        const wrapper  = document.getElementById('kg-rail-wrapper');
+        const rail     = document.getElementById('knowledge-graph-canvas');
+        const countEl  = document.getElementById('kg-rail-count');
+        const toggleBtn = document.getElementById('kg-collapse-btn');
+        const hasEntities = !!(graph && graph.entities && graph.entities.length);
+
+        if (toggleBtn) toggleBtn.classList.toggle('visible', hasEntities);
         if (wrapper) {
-            wrapper.classList.toggle('kg-hidden', !graph || !graph.entities.length);
+            if (!hasEntities) {
+                wrapper.classList.add('kg-hidden');
+                wrapper.classList.remove('kg-collapsed');
+                if (toggleBtn) {
+                    toggleBtn.classList.remove('kg-open');
+                    toggleBtn.setAttribute('aria-expanded', 'false');
+                    const chev = toggleBtn.querySelector('.kg-chevron');
+                    if (chev) chev.style.transform = '';
+                }
+            } else {
+                wrapper.classList.remove('kg-hidden');
+            }
         }
-
-        const rail = document.getElementById('knowledge-graph-canvas');
-        const countEl = document.getElementById('kg-rail-count');
         if (!rail) return;
-
         rail.innerHTML = '';
-
-        if (!graph || !graph.entities.length) {
-            rail.innerHTML = '<span style="font-size:9px;color:var(--text-tertiary);font-family:var(--font-mono);opacity:0.5">Entities appear as you chat...</span>';
-            if (countEl) countEl.textContent = '';
+        if (countEl) countEl.textContent = hasEntities ? graph.entities.length + '' : '';
+        if (!hasEntities) {
+            rail.innerHTML = '<span style="font-size:9px;color:var(--text-tertiary);font-family:var(--font-mono);opacity:0.45">Entities appear as you chat...</span>';
             return;
         }
 

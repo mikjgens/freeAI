@@ -74,7 +74,8 @@
         #doc-loaded-state.loaded { display: flex; }
         #image-drop-overlay { display: none; }
         #chat-input-area.drag-over #image-drop-overlay { display: flex; }
-        #chat-input-area.drag-over .input-row, #chat-input-area.drag-over #attachment-preview { opacity: 0.3; pointer-events: none; }
+        #chat-input-area.drag-over > :not(#image-drop-overlay) { opacity: 0.3; pointer-events: none; }
+        #chat-input-area.drag-over .composer-kg-toggle { opacity: 0.3; pointer-events: none; }
         #toast-container { position: fixed; top: 12px; right: 12px; z-index: var(--z-toast); display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: 380px; }
         .toast { pointer-events: auto; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-family: var(--font-mono); box-shadow: 0 4px 24px rgba(0,0,0,0.5); transform: translateX(120%); transition: transform 0.3s ease, opacity 0.3s ease; opacity: 0; background: rgba(15,18,9,0.95); border: 1px solid var(--border-subtle); color: var(--text-primary); }
         .toast.show { transform: translateX(0); opacity: 1; }
@@ -126,6 +127,135 @@
         .shadow-low:hover { background: rgba(255,68,68,0.06); }
 
         .delta-comparison > .glass-panel { min-width: 0; }
+        /* ── Composer: send/stop zero-layout-shift stack ─────────────── */
+        .composer-action-stack {
+            position: relative;
+            width: 68px;
+            height: 42px;
+            flex-shrink: 0;
+            align-self: flex-end;
+        }
+        .composer-action-btn {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: 11px;
+            letter-spacing: 0.05em;
+            transition: opacity 0.12s ease, filter 0.12s ease;
+        }
+        .composer-action-btn:hover:not(.btn-invisible) { filter: brightness(1.25); }
+        .btn-invisible {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+
+        /* ── Composer: left side-column icon buttons ──────────────────── */
+        .composer-side-col { flex-shrink: 0; }
+        .composer-side-btn {
+            width: 32px !important;
+            height: 32px !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ── Composer: compact toolbar buttons ───────────────────────── */
+        .toolbar-btn-compact {
+            padding: 2px 7px;
+            font-size: 10px;
+            height: 22px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        /* ── Composer: meta text (char/token count) ──────────────────── */
+        .composer-meta-text {
+            font-size: 9px;
+            font-family: var(--font-mono);
+            color: var(--text-tertiary);
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            tabular-nums: all;
+            transition: color 0.2s ease;
+        }
+        .composer-meta-text.over-limit { color: var(--amber); }
+
+        /* ── KG collapse toggle pill ─────────────────────────────────── */
+        .composer-kg-toggle {
+            display: none;                  /* JS adds .visible when entities > 0 */
+            align-items: center;
+            gap: 5px;
+            padding: 2px 10px 2px 8px;
+            border-radius: 20px;
+            font-size: 9px;
+            font-family: var(--font-mono);
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            background: rgba(0,255,65,0.04);
+            border: 1px solid rgba(0,255,65,0.08);
+            color: var(--text-tertiary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+        .composer-kg-toggle.visible { display: inline-flex; }
+        .composer-kg-toggle:hover,
+        .composer-kg-toggle.kg-open {
+            background: var(--green-5);
+            border-color: var(--green-3);
+            color: var(--green-1);
+        }
+        .kg-chevron {
+            display: inline-block;
+            font-size: 8px;
+            opacity: 0.55;
+            transition: transform 0.18s ease;
+            line-height: 1;
+        }
+        .composer-kg-toggle.kg-open .kg-chevron { transform: rotate(180deg); }
+
+        /* ── KG rail states ───────────────────────────────────────────── */
+        #kg-rail-wrapper { transition: none; }
+        #kg-rail-wrapper.kg-hidden   { display: none !important; }
+        #kg-rail-wrapper.kg-collapsed { display: none !important; }
+        #knowledge-graph-canvas { min-height: 26px; }
+        #knowledge-graph-canvas::-webkit-scrollbar { display: none; }
+
+        /* ── Textarea focus ring ──────────────────────────────────────── */
+        #terminal-input:focus {
+            border-color: rgba(0,255,65,0.2) !important;
+            box-shadow: 0 0 0 1px rgba(0,255,65,0.07) !important;
+        }
+        #chat-input-area.input-expanded #terminal-input {
+            border-color: var(--green-3) !important;
+        }
+        #chat-input-area.input-expanded {
+            box-shadow: 0 -4px 24px rgba(0,255,65,0.05);
+        }
+
+        /* ── Mobile collapse ─────────────────────────────────────────── */
+        @media (max-width: 1023px) {
+            #active-model-bar          { display: none !important; }
+            #kg-rail-wrapper           { display: none !important; }
+            .composer-kg-toggle        { display: none !important; }
+            .btn-label                 { display: none; }
+            .composer-action-stack     { width: 42px; }
+            .composer-meta-text        { display: none; }
+            #active-model-indicator    { display: none !important; }
+            .composer-side-col         { gap: 1px; }
+        }
+
         /* Hide the KG rail wrapper when the rail has no real chips */
         #kg-rail-wrapper:has(#knowledge-graph-canvas:empty) {
             display: none;
@@ -244,47 +374,174 @@
                 <div style="color:var(--text-secondary)" class="flex items-center gap-1">Awaiting tactical input...<span class="blink stream-cursor" style="color:var(--green-0)">█</span></div>
                 <div id="scroll-bottom-btn" class="px-3 py-1.5 rounded-full text-xs font-bold shadow-lg border flex items-center gap-1.5 transition-all" style="position:sticky;bottom:4px;float:right;clear:both;background:rgba(0,255,65,0.25);border-color:var(--green-3);color:var(--green-0);opacity:0;pointer-events:none;z-index:1" data-icon="chevronDown"></div>
             </div>
-            <div class="p-4 border-t panel-header relative max-lg:sticky max-lg:bottom-0 max-lg:z-10" id="chat-input-area">
-                <div id="image-drop-overlay" class="absolute inset-0 z-20 rounded-lg items-center justify-center" style="display:none;background:rgba(0,0,0,0.85);border:2px dashed var(--green-2)"><span class="font-bold text-sm inline-flex items-center gap-2" style="color:var(--green-1)" data-icon="photo"> Drop image here <span class="font-normal text-[10px]" style="color:var(--text-tertiary)">JPG, PNG, GIF, WebP · max 20MB</span></span></div>
-                <div id="active-model-bar" class="hidden items-center gap-2 mb-2 px-3 py-1.5 rounded text-[10px]" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.05)"><span style="color:var(--text-tertiary)">Active:</span><span id="active-model-name" class="font-bold" style="color:var(--green-1)"></span><span id="active-model-extra" style="color:var(--text-tertiary)"></span></div>
-                <div id="vision-suggestion" class="hidden items-center gap-2 mb-2 px-3 py-2 rounded text-xs" style="background:rgba(255,180,71,0.08);border:1px solid rgba(255,180,71,0.2)"><span class="flex-1" style="color:var(--amber)">This model doesn't support vision. <span id="vision-suggestion-model" class="font-bold"></span> supports images.</span><button id="switch-vision-btn" class="px-2 py-1 text-[10px] font-bold rounded transition-all" style="background:var(--green-5);border:1px solid var(--green-3);color:var(--green-0)">Switch</button></div>
-                <div id="attachment-preview" class="hidden items-center gap-2 mb-2 px-3 py-2 rounded text-xs" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08)"><img id="attach-thumb" class="w-8 h-8 rounded object-cover border border-gray-600" alt=""><span id="attach-name" class="flex-1 truncate" style="color:var(--text-primary)"></span><span id="attach-size" class="text-[10px]" style="color:var(--text-tertiary)"></span><span id="attach-dims" class="text-[10px]" style="color:var(--text-tertiary)"></span><span class="text-[10px]" style="color:var(--text-tertiary)">attached</span><button id="remove-attach-btn" class="text-lg leading-none px-1" style="color:var(--amber)">&times;</button></div>
-                <div class="flex gap-2 input-row">
-                    <button id="attach-btn" class="icon-btn" title="Attach image" aria-label="Attach image" data-icon="paperclip"></button>
-                    <textarea id="terminal-input" placeholder="Enter command or message..." class="flex-1 rounded px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--green-2)] focus:ring-1 focus:ring-[var(--green-4)] transition-all placeholder-gray-600 font-mono resize-none overflow-y-auto" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" rows="1" aria-label="Message input"></textarea>
-                    <button id="send-btn" class="px-5 py-2.5 rounded font-bold text-sm transition-all flex items-center gap-2" style="background:rgba(0,255,65,0.15);color:var(--green-0);border:1px solid var(--green-3);box-shadow:0 0 12px rgba(0,255,65,0.1)" aria-label="Send message">SEND <span data-icon="chevronDown" style="transform:rotate(-90deg)"></span></button>
-                    <button id="stop-btn" class="hidden px-4 py-2.5 rounded font-bold text-sm transition-all flex items-center gap-2" style="background:rgba(200,50,0,0.15);color:var(--amber);border:1px solid rgba(200,100,0,0.3)" aria-label="Stop streaming" data-icon="stop"> STOP</button>
-                </div>
-                <div class="flex items-center gap-1.5 mt-2 toolbar-row">
-                    <button id="voice-btn" class="toolbar-btn" title="Voice input" aria-label="Voice input" data-icon="mic"></button>
-                    <span class="w-px h-3" style="background:rgba(255,255,255,0.06)"></span>
-                    <button id="delta-toggle-btn" class="toolbar-btn" title="Delta Mode: Compare 4 models" aria-label="Toggle Delta Mode"><span data-icon="cpu"></span> Delta</button>
-                    <span class="w-px h-3" style="background:rgba(255,255,255,0.06)"></span>
-                    <span id="rag-indicator" class="toolbar-indicator hidden" data-icon="doc"> RAG</span>
-                    <div class="flex-1"></div>
-                    <button id="export-btn" class="toolbar-btn" title="Export conversation as markdown" aria-label="Export chat" data-icon="download"></button>
-                </div>
-                <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden">
-                <!-- ═══ KNOWLEDGE GRAPH CHIP RAIL ═══════════════════════════════ -->
-                <div id="kg-rail-wrapper" class="mt-2 pt-2 border-t" style="border-color:rgba(255,255,255,0.05)">
-                    <div class="flex items-center justify-between mb-1.5">
-                        <span class="text-[9px] font-bold uppercase tracking-[0.12em]" style="color:var(--text-tertiary)">
-                            🧠 Entities
+            <!-- ═══════════════ INPUT COMPOSER ════════════════════════════════ -->
+            <div class="border-t panel-header relative max-lg:sticky max-lg:bottom-0 max-lg:z-10"
+                 id="chat-input-area">
+
+                <!-- Drag-over overlay -->
+                <div id="image-drop-overlay"
+                     class="absolute inset-0 z-20 rounded-b-lg items-center justify-center"
+                     style="display:none;background:rgba(0,0,0,0.87);border:2px dashed var(--green-2)">
+                    <span class="font-bold text-sm inline-flex items-center gap-2"
+                          style="color:var(--green-1)" data-icon="photo">
+                        Drop image here
+                        <span class="font-normal text-[10px]" style="color:var(--text-tertiary)">
+                            JPG · PNG · GIF · WebP · max 20MB
                         </span>
-                        <span id="kg-rail-count" class="text-[9px]" style="color:var(--text-tertiary)"></span>
+                    </span>
+                </div>
+
+                <!-- ── Contextual banner stack (each hidden by default) ─────── -->
+                <div class="px-3 pt-2.5 space-y-1.5" id="composer-banners">
+
+                    <!-- Active model pill -->
+                    <div id="active-model-bar"
+                         class="hidden items-center gap-1.5 px-2.5 py-1 rounded text-[10px]"
+                         style="background:rgba(0,255,65,0.03);border:1px solid rgba(0,255,65,0.07)">
+                        <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                              style="background:var(--green-0);box-shadow:0 0 4px rgba(0,255,65,0.5)"></span>
+                        <span style="color:var(--text-tertiary)">Active:</span>
+                        <span id="active-model-name" class="font-bold" style="color:var(--green-1)"></span>
+                        <span id="active-model-extra" class="ml-auto" style="color:var(--text-tertiary)"></span>
                     </div>
+
+                    <!-- Vision suggestion banner -->
+                    <div id="vision-suggestion"
+                         class="hidden items-center gap-2 px-2.5 py-1.5 rounded text-[11px]"
+                         style="background:rgba(255,180,71,0.05);border:1px solid rgba(255,180,71,0.15)">
+                        <span class="flex-1" style="color:var(--amber)">
+                            No vision support.
+                            <span id="vision-suggestion-model" class="font-bold"></span>
+                            supports images.
+                        </span>
+                        <button id="switch-vision-btn"
+                                class="px-2 py-0.5 text-[10px] font-bold rounded flex-shrink-0"
+                                style="background:var(--green-5);border:1px solid var(--green-3);color:var(--green-0)">
+                            Switch
+                        </button>
+                    </div>
+
+                    <!-- Attachment preview -->
+                    <div id="attachment-preview"
+                         class="hidden items-center gap-2 px-2.5 py-1.5 rounded text-[11px]"
+                         style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07)">
+                        <img id="attach-thumb"
+                             class="w-7 h-7 rounded object-cover flex-shrink-0"
+                             style="border:1px solid rgba(255,255,255,0.1)" alt="">
+                        <span id="attach-name" class="flex-1 truncate font-medium"
+                              style="color:var(--text-primary)"></span>
+                        <span id="attach-size"  class="text-[9px]" style="color:var(--text-tertiary)"></span>
+                        <span id="attach-dims"  class="text-[9px]" style="color:var(--text-tertiary)"></span>
+                        <button id="remove-attach-btn"
+                                class="text-lg leading-none px-1.5 flex-shrink-0 ml-1"
+                                style="color:var(--amber)">&times;</button>
+                    </div>
+                </div>
+
+                <!-- ── Main input row ──────────────────────────────────────── -->
+                <div class="flex items-end gap-2 px-3 py-2.5">
+
+                    <!-- Left: attach + voice stacked beside textarea -->
+                    <div class="composer-side-col flex flex-col gap-1.5">
+                        <button id="attach-btn"
+                                class="icon-btn composer-side-btn"
+                                title="Attach image" aria-label="Attach image"
+                                data-icon="paperclip"></button>
+                        <button id="voice-btn"
+                                class="icon-btn composer-side-btn"
+                                title="Voice input" aria-label="Voice input"
+                                data-icon="mic"></button>
+                    </div>
+
+                    <!-- Textarea -->
+                    <textarea id="terminal-input"
+                              placeholder="Enter command or message..."
+                              class="flex-1 rounded px-3 py-2.5 text-sm text-white font-mono resize-none overflow-y-auto focus:outline-none"
+                              style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);min-height:42px"
+                              rows="1"
+                              aria-label="Message input"></textarea>
+
+                    <!-- Send / Stop — fixed container, zero layout shift -->
+                    <div class="composer-action-stack" aria-live="polite" aria-atomic="true">
+                        <button id="send-btn"
+                                class="composer-action-btn"
+                                style="background:rgba(0,255,65,0.12);color:var(--green-0);border:1px solid var(--green-3);box-shadow:0 0 10px rgba(0,255,65,0.06)"
+                                aria-label="Send message">
+                            <span class="btn-icon" data-icon="chevronDown"
+                                  style="transform:rotate(-90deg);display:inline-block;line-height:0"></span>
+                            <span class="btn-label">SEND</span>
+                        </button>
+                        <button id="stop-btn"
+                                class="composer-action-btn btn-invisible"
+                                style="background:rgba(200,50,0,0.12);color:var(--amber);border:1px solid rgba(200,100,0,0.25)"
+                                aria-label="Stop streaming">
+                            <span class="btn-icon" data-icon="stop"></span>
+                            <span class="btn-label">STOP</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ── Toolbar ─────────────────────────────────────────────── -->
+                <div class="flex items-center gap-1.5 px-3 pb-2.5">
+
+                    <!-- Left zone: mode toggles -->
+                    <div class="flex items-center gap-1 flex-shrink-0">
+                        <button id="delta-toggle-btn"
+                                class="toolbar-btn toolbar-btn-compact"
+                                title="Delta Mode: Compare 4 models"
+                                aria-label="Toggle Delta Mode">
+                            <span data-icon="cpu"
+                                  style="display:inline-block;vertical-align:middle"></span>
+                            <span class="hidden sm:inline">Δ</span>
+                        </button>
+                        <span id="rag-indicator" class="toolbar-indicator hidden"
+                              data-icon="doc"> RAG</span>
+                    </div>
+
+                    <!-- Center: KG collapse toggle (hidden until entities exist) -->
+                    <div class="flex-1 flex items-center justify-center">
+                        <button id="kg-collapse-btn"
+                                class="composer-kg-toggle"
+                                title="Toggle entity graph"
+                                aria-label="Toggle knowledge graph"
+                                aria-expanded="true">
+                            <span>🧠</span>
+                            <span id="kg-rail-count" class="font-mono"></span>
+                            <span class="kg-chevron">▾</span>
+                        </button>
+                    </div>
+
+                    <!-- Right zone: meta + export -->
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <span id="input-chars" class="composer-meta-text">0c</span>
+                        <span id="active-model-indicator"
+                              class="composer-meta-text hidden"
+                              style="color:var(--text-tertiary)">
+                            <span id="active-model-indicator-name"
+                                  class="font-bold" style="color:var(--green-1)"></span>
+                        </span>
+                        <button id="export-btn"
+                                class="toolbar-btn toolbar-btn-compact"
+                                title="Export conversation as markdown"
+                                aria-label="Export chat"
+                                data-icon="download"></button>
+                    </div>
+                </div>
+
+                <!-- ── KG entity chip rail (collapsible) ──────────────────── -->
+                <div id="kg-rail-wrapper" class="kg-hidden px-3 pb-3">
                     <div id="knowledge-graph-canvas"
-                         class="flex gap-1.5 overflow-x-auto pb-1"
-                         style="scrollbar-width:none;-ms-overflow-style:none;min-height:24px">
-                        <!-- JS populates this -->
+                         class="flex gap-1.5 overflow-x-auto"
+                         style="scrollbar-width:none;-ms-overflow-style:none;min-height:26px;padding-bottom:2px">
                     </div>
                 </div>
-                <!-- ════════════════════════════════════════════════════════════ -->
-                <div class="flex justify-between items-center mt-2 pt-1.5 border-t" style="border-color:rgba(255,255,255,0.04)">
-                    <div id="input-chars" class="text-[10px]" style="color:var(--text-tertiary)">0 characters</div>
-                    <div class="flex items-center gap-2"><span id="active-model-indicator" class="text-[10px] hidden" style="color:var(--text-tertiary)">Model: <span id="active-model-indicator-name" class="font-bold" style="color:var(--green-1)"></span></span><span class="text-[10px]" style="color:var(--text-tertiary)">Enter to send · Shift+Enter for newline</span></div>
-                </div>
+
+                <!-- Hidden file input -->
+                <input type="file" id="file-input"
+                       accept="image/jpeg,image/png,image/gif,image/webp"
+                       class="hidden">
             </div>
+            <!-- ═════════════════════════════════════════════════════════════ -->
         </section>
         <aside id="sidebar-right" class="col-span-12 lg:col-span-3 flex flex-col glass-panel rounded-lg overflow-hidden order-2 lg:order-3 max-lg:max-h-[40vh] max-lg:border-t max-lg:border-[var(--border-subtle)] max-lg:pt-0" role="region" aria-label="Model fleet selection">
             <div class="px-4 py-2 panel-header">
