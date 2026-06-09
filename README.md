@@ -28,7 +28,7 @@ Multi-model LLM chat interface with **ambient intelligence**. No build step, no 
 | **Temporal Cognition** | Session timeline sidebar. Past sessions color-coded and summarized. System prompt auto-injects user session context. Ctrl+L to close a session — it persists for later recall. |
 | **Model Personality Delta** | Toggle Delta Mode to fan a query out to 4 diverse models simultaneously (fast, deep-reasoning, creative, and your current). Responses render side-by-side in a comparison grid. |
 | **Ambient Session Intelligence** | A "session watcher" runs every 4 messages in the background, looking for contradictions, unresolved questions, and drift. It surfaces non-intrusive `// Notice:` cards with clickable follow-ups. |
-| **Knowledge Graph** | Entity extraction runs on every response (local keyword extraction + optional sub-LLM). A canvas-based force-directed graph accumulates in the right sidebar — nodes color-coded by type (concept, person, decision, question). |
+| **Knowledge Graph** | Entity extraction runs on every response — local keyword extraction always fires, with sub-LLM enrichment when a compatible cheap model is available (works with OpenRouter-only configs). Canvas-based force-directed graph in the right sidebar persists across refreshes. Nodes color-coded by type (concept, person, decision, question). |
 | **Adversarial Shadow Model** | A second, cheap model silently audits every 4th response. Sentences get green (agreed), amber (uncertain), or red (disputed) underlines. Hover to see the shadow's concern. |
 
 ## Providers
