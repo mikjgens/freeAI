@@ -16,6 +16,11 @@ const App = (() => {
             if (!msg && !attachment && !StateManager.isStreaming()) DomLayer.showToast('warning', 'Type a message or attach an image before sending.');
             return;
         }
+        // #4: Cancel pending sub-calls and any in-flight delta
+        const prevAbort = StateManager.get('subCallAbort');
+        if (prevAbort) { try { prevAbort.abort(); } catch (e) {} }
+        const subCtrl = new AbortController();
+        StateManager.set('subCallAbort', subCtrl);
         if (_deltaEnabled && msg) {
             if (attachment) { DomLayer.showToast('warning', 'Delta Mode does not support image attachments.'); return; }
             sendDeltaQuery(msg);
@@ -24,11 +29,6 @@ const App = (() => {
         if (!selectedModel) { DomLayer.showError('No model selected. Click a model in the fleet panel first.'); return; }
         if (selectedModel.type !== 'chat') { DomLayer.showError('Cannot chat with ' + selectedModel.name + ' \u2014 it is a ' + selectedModel.type + ' model.'); return; }
         if (attachment && !selectedModel.vision) { DomLayer.showError(selectedModel.name + ' does not support vision. Select a model with vision capability or remove the attachment.'); return; }
-        // #4: Cancel any pending sub-calls (entity extraction, shadow audit, watcher)
-        const prevAbort = StateManager.get('subCallAbort');
-        if (prevAbort) { try { prevAbort.abort(); } catch (e) {} }
-        const subCtrl = new AbortController();
-        StateManager.set('subCallAbort', subCtrl);
         // #5: Auto-revert fallback model on next send
         const lastFallback = StateManager.get('lastFallbackFrom');
         if (lastFallback) {
@@ -64,8 +64,14 @@ const App = (() => {
             if (dropped > 0) { DomLayer.archiveMessages(StateManager.get('conversationHistory').length - 1); DomLayer.addHorizonBanner(); }
         }
         // #2: TPM-aware trimming for low-limit free tier models
-        const tpmBudget = selectedModel.provider === 'groq' ? 4000 : 8000;
-        if (currentTokens + msgTokens + 2048 > tpmBudget) {
+        const LOW_TPM_BUDGETS = {
+            'qwen/qwen3-32b': 4000,
+            'llama-3.3-70b-versatile': 8000,
+            'llama-3.1-8b-instant': 8000,
+            'meta-llama/llama-3.3-70b-instruct:free': 8000,
+        };
+        const tpmBudget = LOW_TPM_BUDGETS[selectedModel.modelId];
+        if (tpmBudget && currentTokens + msgTokens + 2048 > tpmBudget) {
             const overCtx = parseCtx(String(Math.floor(tpmBudget / 1024)) + 'K');
             const dropped = StateManager.trimHistoryForModel(String(Math.floor(tpmBudget / 1024)) + 'K', 2048 + msgTokens);
             if (dropped > 0) { DomLayer.archiveMessages(StateManager.get('conversationHistory').length - 1); DomLayer.addHorizonBanner(); DomLayer.showInfoInStatus('Trimmed ' + dropped + ' messages to fit free tier TPM budget'); }
@@ -107,60 +113,82 @@ const App = (() => {
 
     async function sendDeltaQuery(msg) {
         const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        const originalModel = StateManager.get('selectedModel');
         StateManager.recompileSystemMessage();
-        const selectedModel = StateManager.get('selectedModel');
 
         const candidates = [...models, ...StateManager.get('customModels')]
             .filter(m => m.type === 'chat' && keys[m.provider]);
-        const fast = candidates.find(m => m.tags?.includes('fastest') || m.tags?.includes('speed')) || candidates[0];
-        const deep = candidates.find(m => (m.tags?.includes('reasoning') || m.tags?.includes('deep-logic')) && m.modelId !== fast?.modelId) || candidates[1];
-        const creative = candidates.find(m => m.provider === 'openrouter' && m.tags?.includes('vision') && m.modelId !== fast?.modelId && m.modelId !== deep?.modelId) || candidates[2];
-        const modelsToCall = [...new Set([selectedModel, fast, deep, creative].filter(Boolean))].slice(0, 4);
+        if (!candidates.length) { DomLayer.showError('No models available. Add API keys in Vault.'); return; }
 
-        if (!modelsToCall.length) { DomLayer.showError('No models available for Delta Mode. Add API keys in Vault.'); return; }
+        const fast = candidates.find(m => (m.tags?.includes('fastest') || m.tags?.includes('speed') || m.tags?.includes('fast')) && m.modelId !== originalModel?.modelId);
+        const deep = candidates.find(m => (m.tags?.includes('reasoning') || m.tags?.includes('deep-logic') || m.tags?.includes('smartest')) && m.modelId !== originalModel?.modelId && m.modelId !== fast?.modelId);
+        const creative = candidates.find(m => (m.tags?.includes('vision') || m.tags?.includes('multimodal') || m.tags?.includes('agentic') || m.tags?.includes('router')) && m.modelId !== originalModel?.modelId && m.modelId !== fast?.modelId && m.modelId !== deep?.modelId);
 
-        if (modelsToCall.length >= 3) DomLayer.showInfoInStatus('Delta Mode fires ' + modelsToCall.length + ' simultaneous API calls. Free tier may rate-limit.');
+        const modelsToCall = [];
+        const add = (m) => { if (m && !modelsToCall.find(x => x.modelId === m.modelId && x.provider === m.provider)) modelsToCall.push(m); };
+        add(originalModel); add(fast); add(deep); add(creative);
+        for (const c of candidates) { if (modelsToCall.length >= 4) break; add(c); }
+        modelsToCall.length = Math.max(2, Math.min(modelsToCall.length, 4));
 
         const userMsgId = crypto.randomUUID();
         DomLayer.addUserMessage(msg, null, userMsgId);
         const input = document.getElementById('terminal-input');
-        input.value = '';
-        try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (_) {}
+        input.value = ''; try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (_) {}
         input.style.height = '36px';
-        StateManager.pushMessage({ _id: userMsgId, role: 'user', content: msg });
+        document.getElementById('chat-input-area').classList.remove('input-expanded');
 
         StateManager.incrementStreaming();
-        DomLayer.updateTerminalStatus('info', 'Querying ' + modelsToCall.length + ' models...');
+        DomLayer.updateTerminalStatus('info', 'Delta: ' + modelsToCall.length + ' models (staggered)...');
         AvatarEngine.startSpeaking();
         playSound('start');
 
-        const history = StateManager.get('conversationHistory');
-        const results = await Promise.allSettled(
-            modelsToCall.map(m => new Promise((resolve, reject) => {
+        // Clean payload: system prompt + current message only — no history
+        const sysContent = StateManager.get('conversationHistory')[0]?.content || SYSTEM_PROMPT;
+        const deltaMessages = [
+            { role: 'system', content: sysContent },
+            { role: 'user', content: msg }
+        ];
+
+        const abortSignal = StateManager.get('subCallAbort')?.signal;
+        const results = [], errors = [];
+        let groqIndex = 0;
+
+        const allPromises = modelsToCall.map(m => new Promise((resolve) => {
+            const delay = m.provider === 'groq' ? (groqIndex++) * 2000 : 0;
+            const fire = () => {
                 const start = performance.now();
                 let full = '';
-                ApiLayer.callProvider(history, m, {
+                ApiLayer.callProvider(deltaMessages, m, {
                     onToken: (t) => { full += t; },
                     onDone: () => resolve({ model: m.name, provider: m.provider, text: full, time: Math.floor(performance.now() - start) }),
-                    onError: (err) => reject(err),
+                    onError: (err) => resolve({ model: m.name, provider: m.provider, error: err }),
                     onToolStart: () => {},
                     onFallback: () => {},
                     onFallbackNotice: () => {},
-                }, new AbortController().signal);
-            }))
-        );
+                }, abortSignal || new AbortController().signal);
+            };
+            if (delay > 0) setTimeout(fire, delay); else fire();
+        }));
+
+        const outcomes = await Promise.allSettled(allPromises);
+        for (const o of outcomes) {
+            if (o.status === 'fulfilled' && o.value) {
+                if (o.value.error) errors.push(o.value);
+                else results.push(o.value);
+            }
+        }
 
         StateManager.decrementStreaming();
         AvatarEngine.stopSpeaking();
         playSound('done');
-
-        const responses = results.filter(r => r.status === 'fulfilled').map(r => r.value);
-        if (responses.length === 0) { DomLayer.showError('All Delta models failed', true); return; }
-
-        DomLayer.renderDeltaComparison(responses, msg);
-        StateManager.pushMessage({ _id: crypto.randomUUID(), role: 'assistant', content: '[Delta comparison — see above]' });
-        StateManager.saveConversation();
+        StateManager.set('selectedModel', originalModel);
+        DomLayer.syncFleetSelection(originalModel);
+        DomLayer.updateActiveModelBar(originalModel);
+        DomLayer.updateModelProfile(originalModel);
         DomLayer.updateTerminalStatus('standby');
+
+        if (!results.length && errors.length) { DomLayer.showError('All Delta models failed', true); return; }
+        DomLayer.renderDeltaComparison(results, errors, msg);
     }
 
     function toggleDeltaMode() {

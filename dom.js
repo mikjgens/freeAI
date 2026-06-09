@@ -146,11 +146,11 @@ const DomLayer = (() => {
     function updateModelProfile(model) {
         const profile = document.getElementById('model-profile');
         if (!profile) return;
-        if (!model) { profile.innerHTML = 'Select a model from the fleet to view detailed telemetry and capabilities...'; return; }
+        if (!model) { profile.innerHTML = 'Select a model below to view telemetry and capabilities.'; return; }
         const tagsHtml = model.tags && model.tags.length ? model.tags.map(t => '<span class="tag-pill inline-block text-[9px] px-1.5 py-0.5 rounded bg-green-900/20 border border-green-500/20 text-green-400 leading-none mr-1 mb-1">' + escapeHtml(t) + '</span>').join('') : '';
         const weaknessHtml = model.weakness ? '<div class="mt-2 p-2 rounded border text-[10px]" style="background:rgba(255,180,71,0.06);border-color:rgba(255,180,71,0.15);color:var(--amber-dim)">' + icon('warning', 'w-3 h-3 align-text-top') + ' ' + escapeHtml(model.weakness) + '</div>' : '';
         if (model.type !== 'chat') {
-            profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Type</span><span class="text-yellow-400 font-bold uppercase">' + escapeHtml(model.type) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2">' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-3 p-3 rounded border text-[11px]" style="background:rgba(255,180,71,0.06);border-color:rgba(255,180,71,0.2);color:var(--amber-dim)">' + icon('warning', 'w-3.5 h-3.5 align-text-top') + ' This is a ' + model.type.toUpperCase() + '-only model. Select a chat model for conversation.</div></div>';
+            profile.innerHTML = '<div class="space-y-1 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-0.5"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-0.5"><span class="text-gray-500">Type</span><span class="text-yellow-400 font-bold uppercase">' + escapeHtml(model.type) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-0.5"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-1">' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-2 p-2 rounded border text-[10px]" style="background:rgba(255,180,71,0.06);border-color:rgba(255,180,71,0.2);color:var(--amber-dim)">' + icon('warning', 'w-3 h-3 align-text-top') + ' This is a ' + model.type.toUpperCase() + '-only model. Select a chat model for conversation.</div></div>';
             return;
         }
         const toolLabel = model.tools === 'Function Calling' ? 'Function Calling' : model.tools === 'Built-in Tools' ? 'Built-in Tools' : model.tools || 'None';
@@ -159,7 +159,7 @@ const DomLayer = (() => {
         if (model.builtInTools && model.builtInTools.length) builtInHtml = '<div class="mt-1 flex flex-wrap gap-1">' + model.builtInTools.map(t => '<span class="text-[8px] px-1 py-0.5 rounded border" style="background:var(--green-6);border-color:var(--green-4);color:var(--green-1)">' + icon('cpu', 'w-2.5 h-2.5 align-text-top') + ' ' + escapeHtml(t) + '</span>').join('') + '</div>';
         let localToolsHtml = '';
         if (model.tools === 'Function Calling' && HARDCODED_TOOLS.length) localToolsHtml = '<div class="mt-1 text-[9px]" style="color:var(--text-tertiary)">' + icon('wrench', 'w-2.5 h-2.5 align-text-top') + ' Local: ' + HARDCODED_TOOLS.map(t => '<span style="color:var(--text-secondary)">' + escapeHtml(t.function.name) + '</span>').join(', ') + '</div>';
-        profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Model ID</span><span class="text-green-400 font-mono text-[10px]">' + escapeHtml(model.modelId) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Tools</span><span class="' + toolColor + ' font-bold">' + toolLabel + '</span></div>' + builtInHtml + localToolsHtml + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2 border-t border-gray-800 pt-2"><span class="text-[9px] text-gray-500 uppercase tracking-wider w-full mb-1">Excels at</span>' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-2 p-2 rounded border italic text-[11px]" style="background:rgba(0,0,0,0.15);border-color:rgba(255,255,255,0.05);color:var(--text-tertiary)">"' + escapeHtml(model.desc) + '"</div></div>';
+        profile.innerHTML = '<div class="space-y-1 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-0.5"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-0.5"><span class="text-gray-500">Model ID</span><span class="text-green-400 font-mono text-[10px]">' + escapeHtml(model.modelId) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-0.5"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-0.5"><span class="text-gray-500">Tools</span><span class="' + toolColor + ' font-bold">' + toolLabel + '</span></div>' + builtInHtml + localToolsHtml + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-1 border-t border-gray-800 pt-1"><span class="text-[9px] text-gray-500 uppercase tracking-wider w-full">Excels at</span>' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-1 p-2 rounded border italic text-[10px]" style="background:rgba(0,0,0,0.15);border-color:rgba(255,255,255,0.05);color:var(--text-tertiary)">"' + escapeHtml(model.desc) + '"</div></div>';
     }
     function _buildUserMessageElement(text, attachment, onDelete) {
         const wrapper = document.createElement('div');
@@ -758,7 +758,7 @@ const DomLayer = (() => {
         mdEl.innerHTML = annotated;
     }
 
-    function renderDeltaComparison(responses, question) {
+    function renderDeltaComparison(responses, errors, question) {
         const terminal = document.getElementById('terminal-output');
         const container = document.createElement('div');
         container.className = 'delta-comparison';
@@ -766,7 +766,8 @@ const DomLayer = (() => {
 
         const hdr = document.createElement('div');
         hdr.style.cssText = 'grid-column:1/-1;padding:4px 8px;border-bottom:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center;';
-        hdr.innerHTML = '<span class="text-green-500 text-xs font-bold">DELTA MODE</span><span class="text-[10px]" style="color:var(--text-tertiary)">' + responses.length + ' responses</span>';
+        const total = responses.length + (errors || []).length;
+        hdr.innerHTML = '<span class="text-green-500 text-xs font-bold">DELTA MODE</span><span class="text-[10px]" style="color:var(--text-tertiary)">' + responses.length + '/' + total + ' · system prompt only · no history</span>';
         container.appendChild(hdr);
 
         for (const r of responses) {
@@ -781,6 +782,17 @@ const DomLayer = (() => {
             container.appendChild(panel);
         }
 
+        if (errors && errors.length) {
+            for (const e of errors) {
+                const panel = document.createElement('div');
+                panel.className = 'glass-panel rounded p-3';
+                panel.style.cssText = 'background:rgba(10,10,10,0.8);border:1px solid rgba(255,180,71,0.2);';
+                panel.innerHTML = '<div class="flex justify-between items-center mb-1"><span class="text-xs font-bold" style="color:var(--amber)">' + escapeHtml(e.model) + '</span><span class="text-[10px]" style="color:var(--amber-dim)">' + escapeHtml(e.provider) + '</span></div>' +
+                    '<div class="text-[10px]" style="color:var(--amber-dim);max-height:120px;overflow-y:auto;">' + escapeHtml(e.error || 'Unknown error') + '</div>';
+                container.appendChild(panel);
+            }
+        }
+
         terminal.appendChild(container);
         terminal.scrollTop = terminal.scrollHeight;
     }
@@ -792,7 +804,7 @@ const DomLayer = (() => {
         if (!canvas) return;
         const rect = canvas.parentElement.getBoundingClientRect();
         canvas.width = Math.max(rect.width - 4, 300);
-        canvas.height = 200;
+        canvas.height = 140;
         const ctx = canvas.getContext('2d');
         const w = canvas.width, h = canvas.height;
         ctx.clearRect(0, 0, w, h);
