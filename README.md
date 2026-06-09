@@ -2,6 +2,12 @@
 
 **28 free models. One file. No server. No build step. Ambient intelligence that audits itself.**
 
+<p align="center">
+  <img src="screenshots/ui_init_state.png" alt="freeAI Command Center v2.7" width="800">
+  <br>
+  <em>The command center at rest — fleet panel, session timeline, knowledge graph chips, and CRT phosphor aesthetic</em>
+</p>
+
 Open `index.html` in any browser and you're running a multi-model AI command center with a pixel-art avatar, chiptune sound design, and an adversarial shadow model that fact-checks every fourth response. The whole thing ships as vanilla JS. No `npm install`, no Docker, no SaaS login.
 
 ---
@@ -32,9 +38,21 @@ But the surface-level stuff — chat, markdown, streaming — that's table stake
 
 This is the thing I haven't seen anywhere else. freeAI runs a background intelligence loop that fires after every fourth message (and a summarizer every sixth):
 
+<p align="center">
+  <img src="screenshots/ui_session_watcher.png" alt="Session Watcher + Shadow Audit" width="700">
+  <br>
+  <em>Shadow audit underlines (green = confident) and an unresolved-question card auto-detected by the session watcher</em>
+</p>
+
 **Adversarial Shadow Model.** A second, cheap model silently audits the primary response. Every sentence gets classified: green (agreed), amber (uncertain), or red (disputed). The sentences render with colored underlines. Hover any underline to see what the shadow flagged. Sentence matching uses text-snippet prefix alignment so annotations stay correct even on markdown-heavy responses. This isn't a "confidence score" sitting in a sidebar — it's embedded directly in the text you're reading.
 
 **Session Intelligence Watcher.** The same background loop scans the last ten messages for contradictions, unresolved questions, and topic drift. If it finds something, it surfaces a non-intrusive `// Notice:` card with clickable follow-ups. You don't have to remember what you asked three exchanges ago — the system does.
+
+<p align="center">
+  <img src="screenshots/ui_delta_compare.png" alt="Delta Mode comparison grid" width="700">
+  <br>
+  <em>Four models respond to the same prompt in parallel — side-by-side comparison with timing</em>
+</p>
 
 **Delta Mode.** Toggle one button and your next query fans out to four diverse models simultaneously: fast, deep-reasoning, creative, and your current model. Responses render side-by-side in a comparison grid. Same system prompt, same question, no conversation history — a clean A/B/C/D test. Staggered dispatch prevents rate-limit collisions.
 
@@ -51,6 +69,12 @@ Filter by provider, capability (vision, tools, fast), or free-text search. The f
 ### The Details
 
 - **TF-IDF RAG** with sentence-aware chunking. Drag a `.md` or `.txt` file into the reference doc panel, toggle RAG on, and relevant chunks auto-inject into the system prompt before every send. No vector database, no embedding API — just term frequency-inverse document frequency running in the browser.
+<p align="center">
+  <img src="screenshots/ui_tool_calling.png" alt="Tool calling in action" width="700">
+  <br>
+  <em>Inline tool execution cards — web_search and evaluate_math calls during a Llama 3.3 70B response</em>
+</p>
+
 - **Function calling** with four local tools: system time, safe math expression evaluation (recursive descent parser, no `eval()`), DuckDuckGo web search, and a UI state inspector.
 - **Auto failover** with retry+backoff. If Groq returns a 429, the system parses the `Retry-After` header, waits, retries up to 3x, then falls through to OpenRouter on the fallback chain. On the next send, it auto-reverts to your preferred model.
 - **Free-tier guardrails** baked in: TPM-aware history trimming for Groq's free tier (4K token budget before every send), base64 image data scrubbing after send to prevent localStorage bloat, background sub-call cancellation when a new message fires, session pruning at 20 sessions.
@@ -71,6 +95,12 @@ You need two free API keys. Both providers offer free tiers — no credit card r
 2. Get an [OpenRouter API key](https://openrouter.ai/keys) (free tier)
 3. Clone the repo, open `index.html`
 4. Click **API Keys & Vault** → paste both keys → **Commit Config**
+
+<p align="center">
+  <img src="screenshots/ui_vault_config.png" alt="API Key Vault modal" width="700">
+  <br>
+  <em>Secure vault stores keys in localStorage — never leaves your browser</em>
+</p>
 5. Pick a model from the Fleet panel and start typing
 
 Or create a `.env` file in the project root and load it through the vault's **.env** button:
