@@ -2,6 +2,7 @@
 
 const DomLayer = (() => {
     let _statusTimeoutId = null;
+    const _modelItemMap = new Map();
 
     function updateTerminalStatus(state, detail) {
         const el = document.getElementById('terminal-status');
@@ -46,7 +47,7 @@ const DomLayer = (() => {
         if (!label || !bar || !pct || !model) return;
         const maxCtx = parseCtx(model.ctx);
         if (maxCtx === Infinity) { label.textContent = model.name; bar.style.width = '0%'; pct.textContent = '\u2014'; pct.style.color = ''; return; }
-        const used = estimateTokens(history);
+        const used = StateManager.estimateTokensCached();
         const pctVal = Math.min(100, Math.round((used / maxCtx) * 100));
         label.textContent = model.name;
         bar.style.width = pctVal + '%';
@@ -86,6 +87,7 @@ const DomLayer = (() => {
         const list = document.getElementById('model-list');
         if (!list) return;
         list.innerHTML = '';
+        _modelItemMap.clear();
         const customModels = StateManager.get('customModels');
         const validatedModels = StateManager.get('validatedModels');
         const selectedModel = StateManager.get('selectedModel');
@@ -130,6 +132,7 @@ const DomLayer = (() => {
             div.setAttribute('aria-selected', isSelected ? 'true' : 'false');
             if (!isVerified && Object.keys(validatedModels).length > 0) div.classList.add('opacity-50');
             if (isSelected) div.classList.add('active');
+            _modelItemMap.set(model.provider + ':' + model.modelId, div);
             const toolIcon = model.tools === 'Function Calling' ? icon('wrench', 'w-3 h-3 align-text-top') : model.tools === 'Built-in Tools' ? icon('cpu', 'w-3 h-3 align-text-top') : '';
             const tagsHtml = model.tags ? model.tags.slice(0, 3).map(t => '<span class="inline-block text-[7px] px-1 py-0.5 rounded bg-gray-800/60 border border-gray-700/50 text-gray-500 leading-none">' + escapeHtml(t) + '</span>').join('') : '';
             const dotColors = { groq: 'var(--green-0)', openrouter: 'var(--amber)', google: 'var(--green-2)', nvidia: 'rgba(200,200,255,0.5)' };
@@ -208,7 +211,7 @@ const DomLayer = (() => {
         regenBtn.style.cssText = 'color:var(--text-tertiary)';
         regenBtn.innerHTML = icon('arrowPath', 'w-3 h-3');
         regenBtn.title = 'Regenerate response';
-        regenBtn.onclick = () => { if (!StateManager.get('isStreaming')) App.regenerateResponse(element); };
+        regenBtn.onclick = () => { if (!StateManager.isStreaming()) App.regenerateResponse(element); };
         element.appendChild(regenBtn);
         const delBtn = document.createElement('button');
         delBtn.className = 'msg-action absolute top-0 right-0 px-1 py-0.5 rounded';
@@ -232,16 +235,18 @@ const DomLayer = (() => {
         element.appendChild(delBtn);
     }
 
-    function addUserMessage(text, attachment) {
+    function addUserMessage(text, attachment, msgId) {
         const wrapper = _buildUserMessageElement(text, attachment);
+        if (msgId) wrapper.dataset.msgId = msgId;
         document.getElementById('terminal-output').appendChild(wrapper);
         document.getElementById('terminal-output').scrollTop = document.getElementById('terminal-output').scrollHeight;
     }
 
-    function createResponseContainer() {
+    function createResponseContainer(msgId) {
         const terminal = document.getElementById('terminal-output');
         const div = document.createElement('div');
         div.className = 'msg-container relative group font-mono text-sm border-l-2 border-transparent pl-2 hover:border-gray-700 transition-colors mb-3 pr-8';
+        if (msgId) div.dataset.msgId = msgId;
         const model = StateManager.get('selectedModel');
         const modelName = model ? ' ' + model.name : '';
         div.innerHTML = '<span class="text-green-500">AI' + escapeHtml(modelName) + ':</span> <div class="text-green-400 markdown-body"></div><div class="image-gallery flex flex-wrap gap-2 mt-2"></div>';
@@ -302,7 +307,7 @@ const DomLayer = (() => {
             retryBtn.className = 'retry-btn text-[10px] rounded px-2 py-0.5 ml-2 mb-2 transition-all inline-flex items-center gap-1';
             retryBtn.style.cssText = 'color:var(--text-tertiary);border:1px solid rgba(255,255,255,0.1)';
             retryBtn.innerHTML = icon('arrowPath', 'w-3 h-3') + ' Retry';
-            retryBtn.onclick = () => { if (StateManager.get('isStreaming')) return; wrapper.remove(); App.sendMessage(); };
+            retryBtn.onclick = () => { if (StateManager.isStreaming()) return; wrapper.remove(); App.sendMessage(); };
             wrapper.appendChild(retryBtn);
         }
         terminal.appendChild(wrapper);
@@ -447,9 +452,13 @@ const DomLayer = (() => {
         if (preview) preview.classList.add('hidden');
     }
 
+    function getModelItem(modelId, provider) {
+        return _modelItemMap.get(provider + ':' + modelId) || null;
+    }
+
     function syncFleetSelection(model) {
         document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
-        const match = findModelItem(model.modelId, model.provider);
+        const match = getModelItem(model.modelId, model.provider);
         if (match) match.classList.add('active');
         updateModelProfile(model);
     }
@@ -643,6 +652,180 @@ const DomLayer = (() => {
         speechSynthesis.speak(utterance);
     }
 
+    function renderSystemCard(analysis) {
+        const terminal = document.getElementById('terminal-output');
+        const card = document.createElement('div');
+        card.style.cssText = 'border-top:1px solid rgba(255,255,255,0.04);border-bottom:1px solid rgba(255,255,255,0.04);padding:6px 0;margin:8px 0;font-size:10px;color:var(--text-tertiary);font-family:var(--font-mono);opacity:0.85;white-space:normal;';
+        if (analysis.recommendation) {
+            card.innerHTML = '<span style="color:var(--text-secondary)">// ' + escapeHtml(analysis.recommendation) + '</span>';
+        }
+        if (analysis.unresolved_questions && analysis.unresolved_questions.length) {
+            card.innerHTML += '<div style="margin-top:3px">Unresolved: ' + analysis.unresolved_questions.slice(0, 2).map(q =>
+                '<span class="unresolved-q" style="color:var(--amber-dim);cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px" data-q="' + escapeHtml(q) + '">' + escapeHtml(q) + '</span>'
+            ).join(' &middot; ') + '</div>';
+            setTimeout(() => {
+                card.querySelectorAll('.unresolved-q').forEach(el => {
+                    el.onclick = () => {
+                        const input = document.getElementById('terminal-input');
+                        if (input) { input.value = el.dataset.q; input.focus(); }
+                    };
+                });
+            }, 0);
+        }
+        terminal.appendChild(card);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function annotateResponse(container, assessments) {
+        const mdEl = container.element.querySelector('.markdown-body');
+        if (!mdEl || !assessments.length) return;
+
+        const text = mdEl.textContent;
+        const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
+        if (sentences.length === 0) return;
+
+        let annotated = '<div class="annotated-response">';
+        for (let i = 0; i < sentences.length; i++) {
+            const a = assessments.find(x => x.sentence_index === i);
+            const trimmed = sentences[i].trim();
+            if (!trimmed) continue;
+            if (a && a.confidence === 'low') {
+                annotated += '<span class="shadow-low" title="' + escapeHtml(a.concern || '') + '">' + trimmed + '</span> ';
+            } else if (a && a.confidence === 'medium') {
+                annotated += '<span class="shadow-medium" title="' + escapeHtml(a.concern || '') + '">' + trimmed + '</span> ';
+            } else if (a && a.confidence === 'high') {
+                annotated += '<span class="shadow-high" title="Verified">' + trimmed + '</span> ';
+            } else {
+                annotated += trimmed + ' ';
+            }
+        }
+        annotated += '</div>';
+        mdEl.innerHTML = annotated;
+    }
+
+    function renderDeltaComparison(responses, question) {
+        const terminal = document.getElementById('terminal-output');
+        const container = document.createElement('div');
+        container.className = 'delta-comparison';
+        container.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin:12px 0;';
+
+        const hdr = document.createElement('div');
+        hdr.style.cssText = 'grid-column:1/-1;padding:4px 8px;border-bottom:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center;';
+        hdr.innerHTML = '<span class="text-green-500 text-xs font-bold">DELTA MODE</span><span class="text-[10px]" style="color:var(--text-tertiary)">' + responses.length + ' responses</span>';
+        container.appendChild(hdr);
+
+        for (const r of responses) {
+            const panel = document.createElement('div');
+            panel.className = 'glass-panel rounded p-3';
+            panel.style.cssText = 'background:rgba(10,10,10,0.8);border:1px solid var(--border-subtle);';
+            const mdContent = typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined'
+                ? DOMPurify.sanitize(marked.parse(r.text || ''))
+                : '<pre style="white-space:pre-wrap;font-size:11px">' + escapeHtml(r.text || '') + '</pre>';
+            panel.innerHTML = '<div class="flex justify-between items-center mb-1"><span class="text-xs font-bold" style="color:var(--green-1)">' + escapeHtml(r.model) + '</span><span class="text-[10px]" style="color:var(--text-tertiary)">' + r.time + 'ms</span></div>' +
+                '<div class="text-xs markdown-body" style="color:var(--text-secondary);max-height:300px;overflow-y:auto;">' + mdContent + '</div>';
+            container.appendChild(panel);
+        }
+
+        terminal.appendChild(container);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    let _graphSim = null;
+
+    function renderKnowledgeGraph(graph) {
+        const canvas = document.getElementById('knowledge-graph-canvas');
+        if (!canvas || !graph.entities.length) {
+            if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
+            return;
+        }
+        const ctx = canvas.getContext('2d');
+        const w = canvas.width, h = canvas.height;
+
+        const typeColors = { concept: '#00ff41', person: '#ffb347', decision: '#4ade80', question: '#ff4444' };
+        const nodes = graph.entities.map((e, i) => ({
+            ...e, x: w/2 + (Math.random() - 0.5) * w * 0.6, y: h/2 + (Math.random() - 0.5) * h * 0.6,
+            vx: 0, vy: 0, radius: 6 + Math.min(e.count || 1, 10) * 2,
+        }));
+        const links = graph.relationships.map(r => ({
+            source: nodes.findIndex(n => n.name === r.from),
+            target: nodes.findIndex(n => n.name === r.to),
+        })).filter(l => l.source >= 0 && l.target >= 0 && l.source !== l.target);
+
+        if (_graphSim) cancelAnimationFrame(_graphSim);
+
+        function tick() {
+            for (let i = 0; i < nodes.length; i++) {
+                nodes[i].vx += (w/2 - nodes[i].x) * 0.001;
+                nodes[i].vy += (h/2 - nodes[i].y) * 0.001;
+            }
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
+                    const dist = Math.max(Math.sqrt(dx*dx + dy*dy), 1);
+                    const force = 50 / (dist * dist);
+                    nodes[i].vx -= dx / dist * force; nodes[i].vy -= dy / dist * force;
+                    nodes[j].vx += dx / dist * force; nodes[j].vy += dy / dist * force;
+                }
+            }
+            for (const l of links) {
+                const dx = nodes[l.target].x - nodes[l.source].x, dy = nodes[l.target].y - nodes[l.source].y;
+                const dist = Math.max(Math.sqrt(dx*dx + dy*dy), 1);
+                const force = (dist - 80) * 0.005;
+                nodes[l.source].vx += dx / dist * force; nodes[l.source].vy += dy / dist * force;
+                nodes[l.target].vx -= dx / dist * force; nodes[l.target].vy -= dy / dist * force;
+            }
+            for (const n of nodes) {
+                if (n.pinned) continue;
+                n.vx *= 0.85; n.vy *= 0.85;
+                n.x += n.vx; n.y += n.vy;
+                n.x = Math.max(n.radius, Math.min(w - n.radius, n.x));
+                n.y = Math.max(n.radius, Math.min(h - n.radius, n.y));
+            }
+            ctx.clearRect(0, 0, w, h);
+            ctx.strokeStyle = 'rgba(0,255,65,0.1)';
+            ctx.lineWidth = 0.5;
+            for (const l of links) {
+                ctx.beginPath();
+                ctx.moveTo(nodes[l.source].x, nodes[l.source].y);
+                ctx.lineTo(nodes[l.target].x, nodes[l.target].y);
+                ctx.stroke();
+            }
+            for (const n of nodes) {
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
+                ctx.fillStyle = (typeColors[n.type] || '#888') + '44';
+                ctx.fill();
+                ctx.strokeStyle = (typeColors[n.type] || '#888');
+                ctx.lineWidth = n.pinned ? 2 : 1;
+                ctx.stroke();
+                ctx.fillStyle = '#d4d4d4';
+                ctx.font = '9px JetBrains Mono, monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(n.name.slice(0, 12), n.x, n.y + n.radius + 12);
+            }
+            _graphSim = requestAnimationFrame(tick);
+        }
+        tick();
+    }
+
+    function renderSessionTimeline() {
+        const sessions = StateManager.get('sessionHistory') || [];
+        const el = document.getElementById('session-timeline');
+        if (!el) return;
+        if (!sessions.length) { el.innerHTML = '<div class="text-[10px]" style="color:var(--text-tertiary)">No past sessions</div>'; return; }
+        let html = '';
+        const recent = sessions.slice(-10).reverse();
+        for (const s of recent) {
+            const date = new Date(s.started).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const summary = s.summary || (s.messages && s.messages.length ? s.messages.length + ' messages' : 'empty');
+            html += '<div class="session-timeline-item" style="border-left:2px solid var(--green-4);padding-left:8px;margin-bottom:6px;font-size:10px">' +
+                '<span style="color:var(--green-1)">' + date + '</span> ' +
+                '<span style="color:var(--text-tertiary)">' + escapeHtml(summary.slice(0, 60)) + '</span>' +
+                '</div>';
+        }
+        el.innerHTML = html;
+    }
+
     function stopSpeaking() {
         if (window.speechSynthesis) window.speechSynthesis.cancel();
         AvatarEngine.stopSpeaking();
@@ -650,12 +833,13 @@ const DomLayer = (() => {
 
     return {
         updateTerminalStatus, showInfoInStatus, updateSendStopButtons, updateContextMeter,
-        updateActiveModelBar, showToast, renderModelList, updateModelProfile,
+        updateActiveModelBar, showToast, renderModelList, updateModelProfile, getModelItem,
         addUserMessage, createResponseContainer, updateStreamText, finalizeResponse: finalizeResponseDOM,
         updateTimestamp, updateLatency, showError, renderToolCallCard,
         archiveMessages, addHorizonBanner, displayImages, showImageLightbox, downloadImage,
         updatePromptCharCount, updateDocUI, updateSessionStats, scrollToBottom, toggleVault,
         renderConversation, showAttachmentPreview, removeAttachmentPreview, syncFleetSelection,
         updateTokenFlow, exportChat, exportHistoryJSON, importHistoryJSON, updateRagIndicator, speakResponse, stopSpeaking,
+        renderSystemCard, annotateResponse, renderDeltaComparison, renderKnowledgeGraph, renderSessionTimeline,
     };
 })();

@@ -2,7 +2,7 @@
 
 const StateManager = (() => {
     const _state = {
-        selectedModel: null, conversationHistory: [], isStreaming: false,
+        selectedModel: null, conversationHistory: [], streamingCount: 0,
         abortController: null, pendingAttachment: null, validatedModels: {},
         customModels: [], currentFilter: 'all', capabilityFilters: [], userPrompt: null, refDoc: null,
         userScrolledAway: false, toolLoopIteration: 0, lastToolCallSig: null, lastToolCallRepeat: 0,
@@ -11,8 +11,15 @@ const StateManager = (() => {
         ttsEnabled: JSON.parse(localStorage.getItem('war_chest_tts_enabled') || 'false'),
         ragChunks: [],
         modelFilterString: localStorage.getItem('war_chest_model_filter') || '',
+        watcherMessageCount: 0,
+        knowledgeGraph: { entities: [], relationships: [] },
+        sessionHistory: [],
+        sessionSummaries: [],
+        currentSessionStart: Date.now(),
+        sessionsLoaded: false,
     };
     const _listeners = {};
+    let _tokenCache = { count: 0, historyLength: -1 };
 
     function get(key) { return _state[key]; }
     function set(key, val) { const prev = _state[key]; _state[key] = val; (_listeners[key] || []).forEach(fn => fn(val, prev)); }
@@ -23,14 +30,105 @@ const StateManager = (() => {
     }
     function getState() { return { ..._state }; }
 
-    function pushMessage(msg) { _state.conversationHistory.push(msg); }
-    function saveConversation() {
+    function incrementStreaming() {
+        _state.streamingCount++;
+        (_listeners['isStreaming'] || []).forEach(fn => fn(true));
+    }
+    function decrementStreaming() {
+        _state.streamingCount = Math.max(0, _state.streamingCount - 1);
+        if (_state.streamingCount === 0)
+            (_listeners['isStreaming'] || []).forEach(fn => fn(false));
+    }
+    function isStreaming() { return _state.streamingCount > 0; }
+
+    function pushMessage(msg) {
+        if (!msg._id) msg._id = crypto.randomUUID();
+        _state.conversationHistory.push(msg);
+        _tokenCache.historyLength = -1;
+        (_listeners['conversationHistory'] || []).forEach(fn => fn(_state.conversationHistory));
+    }
+
+    const _saveConversation = debounce(function _doSave() {
         try {
-            const trimmed = _state.conversationHistory.slice(-MAX_HISTORY);
-            localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(trimmed));
+            const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
+            let sessionData;
+            try { sessionData = raw ? JSON.parse(raw) : null; } catch (e) { sessionData = null; }
+            if (!sessionData || !sessionData.version || sessionData.version < 2) {
+                sessionData = { version: 2, sessions: [], currentSessionId: crypto.randomUUID() };
+            }
+            let current = sessionData.sessions.find(s => s.id === sessionData.currentSessionId);
+            if (!current) {
+                current = { id: sessionData.currentSessionId || crypto.randomUUID(), started: _state.currentSessionStart, ended: null, summary: null, topics: [], messages: [] };
+                sessionData.sessions.push(current);
+                sessionData.currentSessionId = current.id;
+            }
+            current.messages = _state.conversationHistory.slice(-MAX_HISTORY);
+            current.ended = Date.now();
+            localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(sessionData));
         } catch (e) {
-            try { const trimmed = _state.conversationHistory.slice(-50); localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(trimmed)); } catch (_) { }
+            try { localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify({ version: 2, sessions: [{ id: 'recovery', started: Date.now(), messages: _state.conversationHistory.slice(-30) }], currentSessionId: 'recovery' })); } catch (_) {}
         }
+    }, 800);
+
+    function saveConversation() { _saveConversation(); }
+    function saveConversationNow() { _saveConversation.flush(); }
+
+    function loadSessionData() {
+        if (_state.sessionsLoaded) return;
+        _state.sessionsLoaded = true;
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_HISTORY);
+            if (!raw) {
+                _state.conversationHistory = _state.conversationHistory || [{ role: 'system', content: '' }];
+                _state.currentSessionStart = Date.now();
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            if (!parsed.version || parsed.version < 2) {
+                const messages = Array.isArray(parsed) ? parsed : (parsed.messages || []);
+                _state.conversationHistory = messages.length ? messages : [{ role: 'system', content: '' }];
+                _state.sessionHistory = [{ id: crypto.randomUUID(), started: Date.now() - 86400000, ended: Date.now(), summary: null, topics: [], messages: _state.conversationHistory }];
+            } else {
+                _state.sessionHistory = parsed.sessions || [];
+                _state.currentSessionId = parsed.currentSessionId;
+                const current = parsed.sessions.find(s => s.id === parsed.currentSessionId);
+                if (current) {
+                    _state.conversationHistory = current.messages && current.messages.length ? current.messages : [{ role: 'system', content: '' }];
+                    _state.currentSessionStart = current.started || Date.now();
+                } else {
+                    _state.conversationHistory = _state.conversationHistory || [{ role: 'system', content: '' }];
+                    _state.currentSessionStart = Date.now();
+                }
+            }
+        } catch (e) {
+            _state.conversationHistory = _state.conversationHistory || [{ role: 'system', content: '' }];
+            _state.currentSessionStart = Date.now();
+        }
+    }
+
+    function endSession() {
+        const sessionData = {
+            id: _state.currentSessionId || crypto.randomUUID(),
+            started: _state.currentSessionStart,
+            ended: Date.now(),
+            summary: null,
+            topics: [],
+            messages: _state.conversationHistory.slice(-MAX_HISTORY),
+        };
+        _state.sessionHistory.push(sessionData);
+        _state.currentSessionId = crypto.randomUUID();
+        _state.currentSessionStart = Date.now();
+        _state.conversationHistory = [{ role: 'system', content: compiledPrompt() }];
+        saveConversationNow();
+    }
+
+    function estimateTokensCached() {
+        const h = _state.conversationHistory;
+        if (h.length !== _tokenCache.historyLength) {
+            _tokenCache.count = estimateTokens(h);
+            _tokenCache.historyLength = h.length;
+        }
+        return _tokenCache.count;
     }
 
     function wipeAll() {
@@ -44,11 +142,14 @@ const StateManager = (() => {
         localStorage.removeItem('war_chest_audio_muted');
         try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (e) { }
         Object.assign(_state, {
-            selectedModel: null, conversationHistory: [{ role: 'system', content: '' }], isStreaming: false,
+            selectedModel: null, conversationHistory: [{ role: 'system', content: '' }], streamingCount: 0,
             abortController: null, pendingAttachment: null, validatedModels: {}, customModels: [],
             currentFilter: 'all', userPrompt: null, refDoc: null, userScrolledAway: false,
             audioMuted: false, ragEnabled: true, ttsEnabled: false, ragChunks: [],
-            modelFilterString: '',
+            modelFilterString: '', watcherMessageCount: 0,
+            knowledgeGraph: { entities: [], relationships: [] },
+            sessionHistory: [], sessionSummaries: [],
+            currentSessionStart: Date.now(), sessionsLoaded: true,
         });
         (_listeners['*'] || []).forEach(fn => fn(_state));
     }
@@ -75,8 +176,26 @@ const StateManager = (() => {
 
     function compiledPrompt() {
         const base = (_state.userPrompt && _state.userPrompt.trim()) ? _state.userPrompt : SYSTEM_PROMPT;
-        if (_state.refDoc && _state.refDoc.content) return base + '\n\n---\nReference Document (' + _state.refDoc.name + '):\n' + _state.refDoc.content;
-        return base;
+        let prompt = base;
+        if (_state.refDoc && _state.refDoc.content) prompt += '\n\n---\nReference Document (' + _state.refDoc.name + '):\n' + _state.refDoc.content;
+        const sessions = _state.sessionHistory || [];
+        if (sessions.length > 0) {
+            const recent = sessions.filter(s => s.summary).slice(-3);
+            if (recent.length) {
+                prompt += '\n\n---\n## User Session Context\n';
+                for (const s of recent) {
+                    prompt += '- ' + new Date(s.started).toLocaleDateString() + ': ' + s.summary + '\n';
+                }
+            }
+        }
+        if (_state.knowledgeGraph && _state.knowledgeGraph.entities && _state.knowledgeGraph.entities.length) {
+            const pinned = _state.knowledgeGraph.entities.filter(e => e.pinned);
+            if (pinned.length) {
+                prompt += '\n\n---\n## Pinned Knowledge\n';
+                for (const e of pinned) prompt += '- ' + e.name + ' (' + e.type + ')\n';
+            }
+        }
+        return prompt;
     }
 
     function recompileSystemMessage() {
@@ -93,5 +212,10 @@ const StateManager = (() => {
         else if (!valid) validated[provider] = validated[provider].filter(id => id !== modelId);
     }
 
-    return { get, set, subscribe, getState, pushMessage, saveConversation, wipeAll, trimHistoryForModel, compiledPrompt, recompileSystemMessage, setValidated };
+    return {
+        get, set, subscribe, getState, pushMessage, saveConversation, saveConversationNow,
+        wipeAll, trimHistoryForModel, compiledPrompt, recompileSystemMessage, setValidated,
+        incrementStreaming, decrementStreaming, isStreaming, estimateTokensCached,
+        loadSessionData, endSession,
+    };
 })();

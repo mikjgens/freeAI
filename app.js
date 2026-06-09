@@ -4,6 +4,7 @@ const App = (() => {
     let _streamState = null;
     let _wipeHandlerAttached = false;
     let _aiNoteIdx = 0, _lastUserKeyTime = 0;
+    let _deltaEnabled = false;
 
     function sendMessage() {
         const input = document.getElementById('terminal-input');
@@ -11,8 +12,13 @@ const App = (() => {
         const attachment = StateManager.get('pendingAttachment');
         const selectedModel = StateManager.get('selectedModel');
         const history = StateManager.get('conversationHistory');
-        if ((!msg && !attachment) || StateManager.get('isStreaming')) {
-            if (!msg && !attachment && !StateManager.get('isStreaming')) DomLayer.showToast('warning', 'Type a message or attach an image before sending.');
+        if ((!msg && !attachment) || StateManager.isStreaming()) {
+            if (!msg && !attachment && !StateManager.isStreaming()) DomLayer.showToast('warning', 'Type a message or attach an image before sending.');
+            return;
+        }
+        if (_deltaEnabled && msg) {
+            if (attachment) { DomLayer.showToast('warning', 'Delta Mode does not support image attachments.'); return; }
+            sendDeltaQuery(msg);
             return;
         }
         if (!selectedModel) { DomLayer.showError('No model selected. Click a model in the fleet panel first.'); return; }
@@ -42,16 +48,16 @@ const App = (() => {
         }
         _aiNoteIdx = 0;
         playSound('click');
-        DomLayer.addUserMessage(msg, attachment);
+        const userMsgId = crypto.randomUUID();
+        DomLayer.addUserMessage(msg, attachment, userMsgId);
         input.value = '';
         try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (e) { }
         const collapsedH = input.scrollHeight || 36;
         input.style.height = collapsedH + 'px';
         document.getElementById('chat-input-area').classList.remove('input-expanded');
         const userContent = attachment ? [{ type: 'text', text: msg || '...' }, { type: 'image_url', image_url: { url: attachment.dataUrl } }] : msg;
-        StateManager.pushMessage({ role: 'user', content: userContent });
-        StateManager.set('isStreaming', true);
-        DomLayer.updateSendStopButtons(true);
+        StateManager.pushMessage({ _id: userMsgId, role: 'user', content: userContent });
+        StateManager.incrementStreaming();
         DomLayer.updateTerminalStatus('info', 'Processing...');
         AvatarEngine.startSpeaking();
         playSound('start');
@@ -59,6 +65,70 @@ const App = (() => {
         StateManager.set('lastToolCallSig', null);
         StateManager.set('lastToolCallRepeat', 0);
         startStream();
+    }
+
+    async function sendDeltaQuery(msg) {
+        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        StateManager.recompileSystemMessage();
+        const selectedModel = StateManager.get('selectedModel');
+
+        const candidates = [...models, ...StateManager.get('customModels')]
+            .filter(m => m.type === 'chat' && keys[m.provider]);
+        const fast = candidates.find(m => m.tags?.includes('fastest') || m.tags?.includes('speed')) || candidates[0];
+        const deep = candidates.find(m => (m.tags?.includes('reasoning') || m.tags?.includes('deep-logic')) && m.modelId !== fast?.modelId) || candidates[1];
+        const creative = candidates.find(m => m.provider === 'google' && m.modelId !== fast?.modelId && m.modelId !== deep?.modelId) || candidates[2];
+        const modelsToCall = [...new Set([selectedModel, fast, deep, creative].filter(Boolean))].slice(0, 4);
+
+        if (!modelsToCall.length) { DomLayer.showError('No models available for Delta Mode. Add API keys in Vault.'); return; }
+
+        const userMsgId = crypto.randomUUID();
+        DomLayer.addUserMessage(msg, null, userMsgId);
+        const input = document.getElementById('terminal-input');
+        input.value = '';
+        try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (_) {}
+        input.style.height = '36px';
+        StateManager.pushMessage({ _id: userMsgId, role: 'user', content: msg });
+
+        StateManager.incrementStreaming();
+        DomLayer.updateTerminalStatus('info', 'Querying ' + modelsToCall.length + ' models...');
+        AvatarEngine.startSpeaking();
+        playSound('start');
+
+        const history = StateManager.get('conversationHistory');
+        const results = await Promise.allSettled(
+            modelsToCall.map(m => new Promise((resolve, reject) => {
+                const start = performance.now();
+                let full = '';
+                ApiLayer.callProvider(history, m, {
+                    onToken: (t) => { full += t; },
+                    onDone: () => resolve({ model: m.name, provider: m.provider, text: full, time: Math.floor(performance.now() - start) }),
+                    onError: (err) => reject(err),
+                    onToolStart: () => {},
+                    onFallback: () => {},
+                    onFallbackNotice: () => {},
+                }, new AbortController().signal);
+            }))
+        );
+
+        StateManager.decrementStreaming();
+        AvatarEngine.stopSpeaking();
+        playSound('done');
+
+        const responses = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+        if (responses.length === 0) { DomLayer.showError('All Delta models failed', true); return; }
+
+        DomLayer.renderDeltaComparison(responses, msg);
+        StateManager.pushMessage({ _id: crypto.randomUUID(), role: 'assistant', content: '[Delta comparison — see above]' });
+        StateManager.saveConversation();
+        DomLayer.updateTerminalStatus('standby');
+    }
+
+    function toggleDeltaMode() {
+        _deltaEnabled = !_deltaEnabled;
+        const btn = document.getElementById('delta-toggle-btn');
+        if (btn) btn.classList.toggle('active', _deltaEnabled);
+        DomLayer.showInfoInStatus(_deltaEnabled ? 'Delta Mode ON' : 'Delta Mode OFF');
+        playSound('toggle');
     }
 
     function startVoiceInput() {
@@ -103,7 +173,7 @@ const App = (() => {
     }
 
     function regenerateResponse(responseElement) {
-        if (StateManager.get('isStreaming')) return;
+        if (StateManager.isStreaming()) return;
         const containers = document.querySelectorAll('#terminal-output .msg-container');
         let idx = -1;
         containers.forEach((c, i) => { if (c === responseElement) idx = i; });
@@ -145,8 +215,9 @@ const App = (() => {
         StateManager.set('abortController', abortCtrl);
         const output = document.getElementById('terminal-output');
         if (output) output.setAttribute('aria-live', 'off');
-        const container = DomLayer.createResponseContainer();
-        const streamState = { container, fullText: '', tokenCount: 0, tokensReceived: false, startTime: performance.now(), attachmentCleared: false, tokenFlowInterval: null, slowWarning: null };
+        const assistantMsgId = crypto.randomUUID();
+        const container = DomLayer.createResponseContainer(assistantMsgId);
+        const streamState = { container, fullText: '', tokenCount: 0, tokensReceived: false, startTime: performance.now(), attachmentCleared: false, tokenFlowInterval: null, slowWarning: null, msgId: assistantMsgId };
         _streamState = streamState;
         streamState.slowWarning = setTimeout(() => {
             if (!streamState.tokensReceived) DomLayer.showInfoInStatus('Slow response \u2014 still waiting...');
@@ -180,12 +251,11 @@ const App = (() => {
             onError: (errMsg) => {
                 AvatarEngine.stopSpeaking();
                 DomLayer.stopSpeaking();
-                StateManager.set('isStreaming', false);
+                StateManager.decrementStreaming();
                 StateManager.set('abortController', null);
                 if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); }
                 if (streamState.tokenFlowInterval) { clearInterval(streamState.tokenFlowInterval); streamState.tokenFlowInterval = null; }
                 if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
-                DomLayer.updateSendStopButtons(false);
                 DomLayer.updateTerminalStatus('standby');
                 DomLayer.showError(errMsg, true);
             },
@@ -199,7 +269,6 @@ const App = (() => {
                 playSound('error');
                 setTimeout(() => playSound('select'), 80);
                 DomLayer.syncFleetSelection(fbModel);
-                DomLayer.updateActiveModelBar(fbModel);
                 DomLayer.updateTerminalStatus('standby');
             },
             onFallbackNotice: (errMsg) => DomLayer.showInfoInStatus(errMsg + ' — attempting fallback...'),
@@ -209,7 +278,7 @@ const App = (() => {
 
     function finalizeResponse(streamState, finalText, images, aborted) {
         AvatarEngine.stopSpeaking();
-        StateManager.set('isStreaming', false);
+        StateManager.decrementStreaming();
         StateManager.set('abortController', null);
         if (streamState.tokenFlowInterval) { clearInterval(streamState.tokenFlowInterval); streamState.tokenFlowInterval = null; }
         if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
@@ -217,13 +286,11 @@ const App = (() => {
         const latency = Math.floor(performance.now() - streamState.startTime);
         if (streamState.tokenCount) DomLayer.updateTokenFlow(streamState.tokenCount / Math.max(latency / 1000, 0.1), streamState.tokenCount, latency / 1000);
         else DomLayer.updateTokenFlow(null);
-        DomLayer.updateSendStopButtons(false);
-        DomLayer.updateTerminalStatus('standby');
         const outputEl = document.getElementById('terminal-output');
         if (outputEl) outputEl.setAttribute('aria-live', 'polite');
         if (finalText) {
             DomLayer.finalizeResponse(streamState.container.textContainer, finalText);
-            StateManager.pushMessage({ role: 'assistant', content: finalText });
+            StateManager.pushMessage({ _id: streamState.msgId, role: 'assistant', content: finalText });
         }
         if (images && images.length && streamState.container.gallery) DomLayer.displayImages(streamState.container.gallery, images);
         playSound('done');
@@ -231,8 +298,152 @@ const App = (() => {
         DomLayer.updateTimestamp(streamState.container.element, latency, aborted);
         StateManager.saveConversation();
         if (finalText && StateManager.get('ttsEnabled') && !aborted) DomLayer.speakResponse(finalText);
-        DomLayer.updateContextMeter();
-        DomLayer.updateSessionStats();
+
+        const wc = (StateManager.get('watcherMessageCount') || 0) + 1;
+        StateManager.set('watcherMessageCount', wc);
+        if (wc >= 4 && !aborted && finalText) {
+            StateManager.set('watcherMessageCount', 0);
+            setTimeout(() => checkSessionIntelligence(), 1500);
+            setTimeout(() => runShadowAudit(finalText, streamState.container), 500);
+            setTimeout(() => extractEntities(finalText), 2000);
+        }
+    }
+
+    function checkSessionIntelligence() {
+        const history = StateManager.get('conversationHistory');
+        if (history.length < 4) return;
+        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        const cheapModel = [...models].find(m =>
+            m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
+        ) || [...models].find(m =>
+            m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
+        );
+        if (!cheapModel) return;
+
+        const recent = history.slice(-10).map(m => {
+            const content = typeof m.content === 'string' ? m.content :
+                (Array.isArray(m.content) ? m.content.filter(p => p.type === 'text').map(p => p.text).join(' ') : '');
+            return m.role + ': ' + content.slice(0, 300);
+        }).join('\n');
+
+        const prompt = 'Analyze this conversation. Return ONLY a JSON object: {"contradictions":[],"unresolved_questions":[],"drift_events":[],"recommendation":"","should_intervene":false}\n\n' + recent;
+
+        let full = '';
+        ApiLayer.callProvider(
+            [{ role: 'user', content: prompt }],
+            cheapModel,
+            {
+                onToken: (t) => { full += t; },
+                onDone: () => {
+                    try {
+                        const jsonStr = full.match(/\{[\s\S]*\}/)?.[0] || full;
+                        const analysis = JSON.parse(jsonStr);
+                        if (analysis.should_intervene || analysis.recommendation || (analysis.unresolved_questions && analysis.unresolved_questions.length)) {
+                            DomLayer.renderSystemCard(analysis);
+                        }
+                    } catch (_) {}
+                },
+                onError: () => {},
+                onToolStart: () => {},
+                onFallback: () => {},
+                onFallbackNotice: () => {},
+            },
+            new AbortController().signal
+        );
+    }
+
+    function runShadowAudit(responseText, container) {
+        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        const shadowModel = [...models].find(m =>
+            m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
+        ) || [...models].find(m =>
+            m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
+        );
+        if (!shadowModel || responseText.length < 50) return;
+
+        const history = StateManager.get('conversationHistory');
+        const lastUserMsg = [...history].reverse().find(m => m.role === 'user');
+        let question = '';
+        if (lastUserMsg) {
+            question = typeof lastUserMsg.content === 'string' ? lastUserMsg.content :
+                (Array.isArray(lastUserMsg.content) ? lastUserMsg.content.filter(p => p.type === 'text').map(p => p.text).join(' ') : '');
+        }
+
+        const prompt = 'Audit this answer. Return ONLY a JSON array: [{"sentence_index":0,"confidence":"high|medium|low","concern":null|"reason"}]\n\nQuestion: ' + question.slice(0, 400) + '\nAnswer: ' + responseText.slice(0, 1500);
+
+        let full = '';
+        ApiLayer.callProvider(
+            [{ role: 'user', content: prompt }],
+            shadowModel,
+            {
+                onToken: (t) => { full += t; },
+                onDone: () => {
+                    try {
+                        const jsonStr = full.match(/\[[\s\S]*\]/)?.[0] || full;
+                        const assessments = JSON.parse(jsonStr);
+                        if (Array.isArray(assessments) && assessments.length) {
+                            DomLayer.annotateResponse(container, assessments);
+                        }
+                    } catch (_) {}
+                },
+                onError: () => {},
+                onToolStart: () => {},
+                onFallback: () => {},
+                onFallbackNotice: () => {},
+            },
+            new AbortController().signal
+        );
+    }
+
+    function extractEntities(responseText) {
+        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        const cheapModel = [...models].find(m =>
+            m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
+        ) || [...models].find(m =>
+            m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
+        );
+        if (!cheapModel) return;
+
+        const history = StateManager.get('conversationHistory');
+        const lastUser = [...history].reverse().find(m => m.role === 'user');
+        const context = lastUser ? (typeof lastUser.content === 'string' ? lastUser.content.slice(0, 300) : '') : '';
+
+        const prompt = 'Extract entities and relationships from this exchange. Return ONLY JSON: {"entities":[{"name":"...","type":"concept|person|decision|question"}],"relationships":[{"from":"...","to":"...","label":"..."}]}\n\nUser: ' + context + '\nAI: ' + responseText.slice(0, 1000);
+
+        let full = '';
+        ApiLayer.callProvider(
+            [{ role: 'user', content: prompt }],
+            cheapModel,
+            {
+                onToken: (t) => { full += t; },
+                onDone: () => {
+                    try {
+                        const jsonStr = full.match(/\{[\s\S]*\}/)?.[0] || full;
+                        const extracted = JSON.parse(jsonStr);
+                        const graph = StateManager.get('knowledgeGraph');
+                        for (const e of extracted.entities || []) {
+                            const existing = graph.entities.find(x => x.name === e.name);
+                            if (!existing) graph.entities.push({ ...e, count: 1, pinned: false });
+                            else existing.count = (existing.count || 1) + 1;
+                            if (e.pinned) { const ex = graph.entities.find(x => x.name === e.name); if (ex) ex.pinned = true; }
+                        }
+                        for (const r of extracted.relationships || []) {
+                            const key = r.from + '\u2192' + r.to + ':' + r.label;
+                            if (!graph.relationships.find(x => (x.from + '\u2192' + x.to + ':' + x.label) === key)) {
+                                graph.relationships.push(r);
+                            }
+                        }
+                        StateManager.set('knowledgeGraph', graph);
+                        DomLayer.renderKnowledgeGraph(graph);
+                    } catch (_) {}
+                },
+                onError: () => {},
+                onToolStart: () => {},
+                onFallback: () => {},
+                onFallbackNotice: () => {},
+            },
+            new AbortController().signal
+        );
     }
 
     async function handleToolCalls(partialText, toolCalls) {
@@ -245,11 +456,10 @@ const App = (() => {
             StateManager.set('lastToolCallSig', null);
             StateManager.set('lastToolCallRepeat', 0);
             AvatarEngine.stopSpeaking();
-            StateManager.set('isStreaming', false);
+            StateManager.decrementStreaming();
             StateManager.set('abortController', null);
             if (_streamState?.tokenFlowInterval) { clearInterval(_streamState.tokenFlowInterval); _streamState.tokenFlowInterval = null; }
             if (_streamState?.slowWarning) { clearTimeout(_streamState.slowWarning); _streamState.slowWarning = null; }
-            DomLayer.updateSendStopButtons(false);
             DomLayer.updateTerminalStatus('standby');
             DomLayer.showError('Tool loop aborted: repeated identical tool call detected.', false);
             return;
@@ -261,33 +471,32 @@ const App = (() => {
     }
 
     function stopStreaming() {
-        if (!StateManager.get('isStreaming')) { DomLayer.stopSpeaking(); return; }
+        if (!StateManager.isStreaming()) { DomLayer.stopSpeaking(); return; }
         playSound('stop');
         const ctrl = StateManager.get('abortController');
         if (ctrl) ctrl.abort();
-        StateManager.set('isStreaming', false);
+        StateManager.decrementStreaming();
         StateManager.set('abortController', null);
         AvatarEngine.stopSpeaking();
         DomLayer.stopSpeaking();
         if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); }
         if (_streamState?.tokenFlowInterval) { clearInterval(_streamState.tokenFlowInterval); _streamState.tokenFlowInterval = null; }
         if (_streamState?.slowWarning) { clearTimeout(_streamState.slowWarning); _streamState.slowWarning = null; }
-        DomLayer.updateSendStopButtons(false);
         DomLayer.updateTerminalStatus('standby');
     }
+
     function selectModel(model) {
-        if (StateManager.get('isStreaming')) {
+        if (StateManager.isStreaming()) {
             stopStreaming();
         }
-        if (StateManager.get('isStreaming')) return;
+        if (StateManager.isStreaming()) return;
         DomLayer.updateModelProfile(model);
         if (model.type !== 'chat') { DomLayer.showToast('warning', '[' + model.name + '] is a ' + model.type + ' model. Select a chat model for conversation.'); return; }
         document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
-        const match = findModelItem(model.modelId, model.provider);
+        const match = DomLayer.getModelItem(model.modelId, model.provider);
         if (match) match.classList.add('active');
         const doSwitch = () => {
             StateManager.set('selectedModel', model);
-            DomLayer.updateActiveModelBar(model);
             localStorage.setItem(STORAGE_KEY_ACTIVE_MODEL, JSON.stringify({ provider: model.provider, modelId: model.modelId }));
             StateManager.recompileSystemMessage();
             const history = StateManager.get('conversationHistory');
@@ -308,9 +517,7 @@ const App = (() => {
             }
             StateManager.saveConversation();
             playSound('select');
-            DomLayer.updateTerminalStatus('standby');
             DomLayer.showInfoInStatus('Switched to [' + model.name + ']');
-            DomLayer.updateContextMeter();
         };
         const currentModel = StateManager.get('selectedModel');
         if (currentModel && currentModel.modelId === model.modelId && currentModel.provider === model.provider) { StateManager.recompileSystemMessage(); StateManager.saveConversation(); return; }
@@ -322,7 +529,7 @@ const App = (() => {
                 onCancel: () => {
                     const oldModel = StateManager.get('selectedModel');
                     document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
-                    if (oldModel) { const m = findModelItem(oldModel.modelId, oldModel.provider); if (m) m.classList.add('active'); }
+                    if (oldModel) { const m = DomLayer.getModelItem(oldModel.modelId, oldModel.provider); if (m) m.classList.add('active'); }
                 }
             });
         } else doSwitch();
@@ -488,49 +695,59 @@ const App = (() => {
                 document.querySelectorAll('#terminal-output > *').forEach(el => el.remove());
                 DomLayer.showToast('success', 'All data wiped. System reset.');
                 DomLayer.updateTerminalStatus('standby');
-                DomLayer.updateContextMeter();
-                DomLayer.updateSessionStats();
                 DomLayer.showInfoInStatus('System wiped clean');
             }
         });
     }
 
-    function validateProviderModels() {
-        const allModels = [...models, ...StateManager.get('customModels')];
+    async function validateProviderModels() {
         const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
-        const ENDPOINTS = {
-            groq: { url: 'https://api.groq.com/openai/v1/models', keyParam: 'header' },
-            openrouter: { url: 'https://openrouter.ai/api/v1/models', keyParam: 'header' },
-            nvidia: { url: 'https://integrate.api.nvidia.com/v1/chat/completions', keyParam: 'header' },
-            google: { url: null, keyParam: 'query' },
-        };
-        fetchAndValidate(0);
-        function fetchAndValidate(idx) {
-            if (idx >= allModels.length) return;
-            const model = allModels[idx];
-            if (StateManager.get('validatedModels')[model.modelId + ':' + model.provider]) { fetchAndValidate(idx + 1); return; }
-            const apiKey = keys[model.provider];
-            if (!apiKey) { fetchAndValidate(idx + 1); return; }
-            const cfg = ENDPOINTS[model.provider];
-            if (!cfg) { fetchAndValidate(idx + 1); return; }
-            const id = model.modelId;
-            if (model.provider === 'google') {
-                fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey)
-                    .then(r => r.json().then(d => {
-                        const valid = d.models?.some(m => m.name === 'models/' + id);
-                        StateManager.setValidated(id + ':' + model.provider, valid);
-                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-50', 'pointer-events-none'); }
-                    }).catch(() => { })).catch(() => { }).finally(() => fetchAndValidate(idx + 1));
-            } else {
-                fetch(cfg.url, { headers: { 'Authorization': 'Bearer ' + apiKey } })
-                    .then(r => r.json().then(d => {
-                        const modelList = d.data || d.models || [];
-                        const valid = modelList.some(m => (m.id === id) || (m.name === id));
-                        StateManager.setValidated(id + ':' + model.provider, valid);
-                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-50', 'pointer-events-none'); }
-                    }).catch(() => { })).catch(() => { }).finally(() => fetchAndValidate(idx + 1));
-            }
+        const allModels = [...models, ...StateManager.get('customModels')];
+        const checks = [];
+
+        if (keys.groq) {
+            checks.push((async () => {
+                try {
+                    const r = await fetch('https://api.groq.com/openai/v1/models', { headers: { 'Authorization': 'Bearer ' + keys.groq } });
+                    const d = await r.json();
+                    const ids = new Set((d.data || []).map(m => m.id));
+                    allModels.filter(m => m.provider === 'groq').forEach(m => StateManager.setValidated(m.modelId + ':groq', ids.has(m.modelId)));
+                } catch (_) {}
+            })());
         }
+        if (keys.openrouter) {
+            checks.push((async () => {
+                try {
+                    const r = await fetch('https://openrouter.ai/api/v1/models', { headers: { 'Authorization': 'Bearer ' + keys.openrouter } });
+                    const d = await r.json();
+                    const ids = new Set((d.data || []).map(m => m.id));
+                    allModels.filter(m => m.provider === 'openrouter').forEach(m => StateManager.setValidated(m.modelId + ':openrouter', ids.has(m.modelId)));
+                } catch (_) {}
+            })());
+        }
+        if (keys.nvidia) {
+            checks.push((async () => {
+                try {
+                    const r = await fetch('https://integrate.api.nvidia.com/v1/models', { headers: { 'Authorization': 'Bearer ' + keys.nvidia } });
+                    const d = await r.json();
+                    const ids = new Set((d.data || []).map(m => m.id));
+                    allModels.filter(m => m.provider === 'nvidia').forEach(m => StateManager.setValidated(m.modelId + ':nvidia', ids.has(m.modelId)));
+                } catch (_) {}
+            })());
+        }
+        if (keys.google) {
+            checks.push((async () => {
+                try {
+                    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + keys.google);
+                    const d = await r.json();
+                    const ids = new Set((d.models || []).map(m => m.name.replace('models/', '')));
+                    allModels.filter(m => m.provider === 'google').forEach(m => StateManager.setValidated(m.modelId + ':google', ids.has(m.modelId)));
+                } catch (_) {}
+            })());
+        }
+
+        await Promise.allSettled(checks);
+        DomLayer.renderModelList();
     }
 
     function handleKeyDown(e) {
@@ -590,10 +807,11 @@ const App = (() => {
     function removeAttachment() { StateManager.set('pendingAttachment', null); DomLayer.removeAttachmentPreview(); playSound('click'); }
 
     function loadConversation() {
+        StateManager.loadSessionData();
         const allModels = [...models, ...StateManager.get('customModels')];
         const activeRaw = localStorage.getItem(STORAGE_KEY_ACTIVE_MODEL);
         if (activeRaw) {
-            try { const parsed = JSON.parse(activeRaw); const found = allModels.find(m => m.provider === parsed.provider && m.modelId === parsed.modelId); if (found) { StateManager.set('selectedModel', found); DomLayer.updateActiveModelBar(found); DomLayer.updateModelProfile(found); const el = findModelItem(found.modelId, found.provider); if (el) el.classList.add('active'); } } catch (e) { }
+            try { const parsed = JSON.parse(activeRaw); const found = allModels.find(m => m.provider === parsed.provider && m.modelId === parsed.modelId); if (found) { StateManager.set('selectedModel', found); DomLayer.updateActiveModelBar(found); DomLayer.updateModelProfile(found); const el = DomLayer.getModelItem(found.modelId, found.provider); if (el) el.classList.add('active'); } } catch (e) { }
         }
         if (!StateManager.get('selectedModel')) {
             const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
@@ -602,8 +820,6 @@ const App = (() => {
         }
         StateManager.recompileSystemMessage();
         DomLayer.renderConversation();
-        DomLayer.updateContextMeter();
-        DomLayer.updateSessionStats();
         DomLayer.updateTerminalStatus('standby');
     }
 
@@ -622,7 +838,7 @@ const App = (() => {
     function setupModelFilterEvents() {
         const filterInput = document.getElementById('model-filter');
         if (!filterInput) return;
-        filterInput.value = StateManager.get('modelFilterString') || ''; // Restore persisted filter
+        filterInput.value = StateManager.get('modelFilterString') || '';
         filterInput.addEventListener('input', (e) => {
             StateManager.set('modelFilterString', e.target.value);
             localStorage.setItem('war_chest_model_filter', e.target.value);
@@ -758,11 +974,14 @@ const App = (() => {
     function setupGlobalEvents() {
         document.addEventListener('scroll-to-bottom', () => DomLayer.scrollToBottom());
         document.addEventListener('scroll-fab', () => DomLayer.scrollToBottom());
-        window.addEventListener('beforeunload', (e) => { if (document.getElementById('terminal-input')?.value) { e.preventDefault(); e.returnValue = ''; } });
+        window.addEventListener('beforeunload', (e) => {
+            StateManager.saveConversationNow();
+            if (document.getElementById('terminal-input')?.value) { e.preventDefault(); e.returnValue = ''; }
+        });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); return; }
-                if (StateManager.get('isStreaming')) { stopStreaming(); return; }
+                if (StateManager.isStreaming()) { stopStreaming(); return; }
                 const vault = document.getElementById('vault-modal');
                 if (vault && !vault.classList.contains('hidden')) { toggleVault(); return; }
                 const confirmOv = document.getElementById('confirm-modal-overlay');
@@ -773,12 +992,9 @@ const App = (() => {
             }
             if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
                 e.preventDefault();
-                if (!StateManager.get('isStreaming')) {
-                    StateManager.set('conversationHistory', [{ role: 'system', content: StateManager.compiledPrompt() }]);
+                if (!StateManager.isStreaming()) {
+                    StateManager.endSession();
                     document.querySelectorAll('#terminal-output > *').forEach(el => el.remove());
-                    StateManager.saveConversation();
-                    DomLayer.updateContextMeter();
-                    DomLayer.updateSessionStats();
                     DomLayer.showInfoInStatus('Chat cleared');
                 }
             }
@@ -821,6 +1037,9 @@ const App = (() => {
             if (ttsBtn) { ttsBtn.classList.add('active'); ttsBtn.title = 'Disable auto-speak'; }
         }
         if (window.speechSynthesis) document.getElementById('tts-toggle-btn').classList.remove('hidden');
+
+        const deltaBtn = document.getElementById('delta-toggle-btn');
+        if (deltaBtn) deltaBtn.addEventListener('click', toggleDeltaMode);
     }
 
     function replaceIcons() {
@@ -866,6 +1085,21 @@ const App = (() => {
         setupToolbarEvents();
         setupDragEvents();
         AvatarEngine.init();
+
+        // CC01: Wire subscribe for automatic DOM updates on state changes
+        StateManager.subscribe('selectedModel', (model) => {
+            DomLayer.updateActiveModelBar(model);
+            DomLayer.updateContextMeter();
+            DomLayer.updateModelProfile(model);
+        });
+        StateManager.subscribe('conversationHistory', () => {
+            DomLayer.updateContextMeter();
+            DomLayer.updateSessionStats();
+        });
+        StateManager.subscribe('isStreaming', (streaming) => {
+            DomLayer.updateSendStopButtons(streaming);
+        });
+
         document.getElementById('terminal-input').style.height = document.getElementById('terminal-input').scrollHeight + 'px';
         setTimeout(() => playSound('poweron'), 300);
         if (StateManager.get('audioMuted')) {
@@ -874,7 +1108,7 @@ const App = (() => {
         }
     }
 
-    return { init, sendMessage, stopStreaming, selectModel, toggleVault, saveKeys, loadEnvFile, handleEnvFile, loadKeys, applySystemPrompt, resetSystemPrompt, loadPrompt, wipeSystem, handleAttachment, removeAttachment, regenerateResponse, startVoiceInput };
+    return { init, sendMessage, stopStreaming, selectModel, toggleVault, saveKeys, loadEnvFile, handleEnvFile, loadKeys, applySystemPrompt, resetSystemPrompt, loadPrompt, wipeSystem, handleAttachment, removeAttachment, regenerateResponse, startVoiceInput, toggleDeltaMode };
 })();
 
 // Boot

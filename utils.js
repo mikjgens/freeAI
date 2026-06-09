@@ -117,3 +117,10 @@ function findModelItem(modelId, provider) {
     }
     return null;
 }
+
+function debounce(fn, ms) {
+    let t;
+    const debounced = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    debounced.flush = () => { clearTimeout(t); fn(); };
+    return debounced;
+}

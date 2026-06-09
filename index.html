@@ -90,7 +90,7 @@
         .msg-archived { opacity: 0.3 !important; filter: grayscale(0.8) !important; pointer-events: none !important; transition: all 0.5s ease; }
         .msg-action { opacity: 0; transition: opacity 0.15s ease; }
         .msg-container:hover .msg-action { opacity: 1; }
-        #terminal-output { overflow-wrap: break-word; word-break: break-word; white-space: pre-wrap; }
+        #terminal-output { contain: content; overflow-wrap: break-word; word-break: break-word; white-space: pre-wrap; }
         #terminal-output > .msg-container { white-space: normal; }
         #terminal-output .markdown-body { white-space: normal; }
         #input-chars { transition: color 0.2s ease; }
@@ -118,6 +118,14 @@
         .stream-cursor { transition: opacity 0.15s ease; }
         .context-meter-bar { transition: width 0.5s ease-out, background 0.5s ease-out; }
         .context-meter-pct { transition: color 0.5s ease-out; }
+        .shadow-high { border-bottom: 1.5px solid rgba(0,255,65,0.5); cursor: help; }
+        .shadow-medium { border-bottom: 1.5px dotted var(--amber); cursor: help; }
+        .shadow-low { border-bottom: 1.5px dashed #ff4444; cursor: help; }
+        .shadow-high:hover { background: rgba(0,255,65,0.06); }
+        .shadow-medium:hover { background: rgba(255,180,71,0.06); }
+        .shadow-low:hover { background: rgba(255,68,68,0.06); }
+        #knowledge-graph-canvas { width: 100%; height: 200px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(0,0,0,0.3); cursor: grab; margin-top: 6px; }
+        .delta-comparison > .glass-panel { min-width: 0; }
 
         @media (prefers-reduced-motion: reduce) {
             .crt-flicker { animation: none; } .scanlines { opacity: 0.08; } .blink { animation: none; opacity: 1; }
@@ -203,6 +211,10 @@
                     </div>
                     <input type="file" id="doc-file-input" accept=".md,.txt" class="hidden">
                 </div>
+                <div class="border-t pt-2 mt-2" style="border-color:rgba(255,255,255,0.06)">
+                    <h2 class="text-xs font-bold uppercase tracking-widest mb-1 inline-flex items-center gap-1.5" style="color:var(--text-secondary)" data-icon="clock"> Session Timeline</h2>
+                    <div id="session-timeline" class="text-[10px] font-mono space-y-0.5"></div>
+                </div>
                 <div class="mt-auto pt-3 border-t shrink-0" style="border-color:rgba(255,255,255,0.06)">
                     <div class="flex justify-between text-[10px] font-mono" style="color:var(--text-tertiary)"><span class="inline-flex items-center gap-1" data-icon="bolt"> <span id="last-latency">0ms</span></span><span class="inline-flex items-center gap-1" data-icon="chat"> <span id="msg-count">0</span></span></div>
                 </div>
@@ -236,6 +248,8 @@
                 <div class="flex items-center gap-1.5 mt-1.5 toolbar-row">
                     <button id="voice-btn" class="toolbar-btn" title="Voice input" aria-label="Voice input" data-icon="mic"></button>
                     <span class="w-px h-3" style="background:rgba(255,255,255,0.06)"></span>
+                    <button id="delta-toggle-btn" class="toolbar-btn" title="Delta Mode: Compare 4 models" aria-label="Toggle Delta Mode"><span data-icon="cpu"></span> Delta</button>
+                    <span class="w-px h-3" style="background:rgba(255,255,255,0.06)"></span>
                     <span id="rag-indicator" class="toolbar-indicator hidden" data-icon="doc"> RAG</span>
                     <div class="flex-1"></div>
                     <button id="export-btn" class="toolbar-btn" title="Export conversation as markdown" aria-label="Export chat" data-icon="download"></button>
@@ -267,6 +281,8 @@
             <div class="p-4 border-t panel-header">
                 <div class="text-[10px] font-bold uppercase tracking-wider mb-2 inline-flex items-center gap-1" style="color:var(--text-tertiary)" data-icon="chart"> Model Profile</div>
                 <div id="model-profile" class="text-xs font-mono leading-relaxed" style="color:var(--text-secondary)">Select a model from the fleet to view detailed telemetry and capabilities...</div>
+                <div class="text-[10px] font-bold uppercase tracking-wider mt-3 mb-1 inline-flex items-center gap-1" style="color:var(--text-tertiary)" data-icon="bolt"> Knowledge Graph</div>
+                <canvas id="knowledge-graph-canvas" width="300" height="200"></canvas>
             </div>
         </aside>
     </main>

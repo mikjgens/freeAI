@@ -1,12 +1,18 @@
 // TF-IDF document chunking & retrieval for RAG
 
 function chunkDocument(text) {
-    const words = text.split(/\s+/).filter(Boolean);
-    const chunks = [];
-    const chunkSize = 200;
-    for (let i = 0; i < words.length; i += chunkSize) {
-        chunks.push({ index: chunks.length, text: words.slice(i, i + chunkSize).join(' ') });
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const chunks = [], chunkSize = 200;
+    let current = [], wordCount = 0;
+    for (const s of sentences) {
+        const words = s.split(/\s+/).filter(Boolean).length;
+        if (wordCount + words > chunkSize && current.length) {
+            chunks.push({ index: chunks.length, text: current.join(' ') });
+            current = []; wordCount = 0;
+        }
+        current.push(s.trim()); wordCount += words;
     }
+    if (current.length) chunks.push({ index: chunks.length, text: current.join(' ') });
     return chunks;
 }
 
