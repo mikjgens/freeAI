@@ -66,7 +66,7 @@ const DomLayer = (() => {
         bar.classList.remove('hidden');
         nameEl.textContent = model.name;
         const toolIcon = model.tools === 'Function Calling' ? icon('wrench', 'w-3 h-3 align-middle') : model.tools === 'Built-in Tools' ? icon('cpu', 'w-3 h-3 align-middle') : '';
-        extraEl.textContent = '\u00B7 ' + model.provider + ' \u00B7 ' + (model.ctx || '?') + ' ' + toolIcon;
+        extraEl.innerHTML = '\u00B7 ' + escapeHtml(model.provider) + ' \u00B7 ' + escapeHtml(model.ctx || '?') + ' ' + toolIcon;
         indicator.classList.remove('hidden');
         indicatorName.textContent = model.name;
     }
