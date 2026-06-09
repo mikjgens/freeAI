@@ -124,9 +124,14 @@
         .shadow-high:hover { background: rgba(0,255,65,0.06); }
         .shadow-medium:hover { background: rgba(255,180,71,0.06); }
         .shadow-low:hover { background: rgba(255,68,68,0.06); }
-        #knowledge-graph-canvas { width: 100%; height: 140px; border: 1px solid var(--border-subtle); border-radius: 4px; background: rgba(0,0,0,0.3); cursor: grab; margin-top: 4px; }
-        .delta-comparison > .glass-panel { min-width: 0; }
 
+        .delta-comparison > .glass-panel { min-width: 0; }
+        /* Hide the KG rail wrapper when the rail has no real chips */
+        #kg-rail-wrapper:has(#knowledge-graph-canvas:empty) {
+            display: none;
+        }
+        /* Fallback for browsers without :has() support */
+        #kg-rail-wrapper.kg-hidden { display: none; }
         @media (prefers-reduced-motion: reduce) {
             .crt-flicker { animation: none; } .scanlines { opacity: 0.08; } .blink { animation: none; opacity: 1; }
             .model-item, .filter-btn, .tag-pill, .offline-banner, #doc-drop-zone, .toast, #terminal-input, #chat-input-area { transition: none; }
@@ -250,7 +255,7 @@
                     <button id="send-btn" class="px-5 py-2.5 rounded font-bold text-sm transition-all flex items-center gap-2" style="background:rgba(0,255,65,0.15);color:var(--green-0);border:1px solid var(--green-3);box-shadow:0 0 12px rgba(0,255,65,0.1)" aria-label="Send message">SEND <span data-icon="chevronDown" style="transform:rotate(-90deg)"></span></button>
                     <button id="stop-btn" class="hidden px-4 py-2.5 rounded font-bold text-sm transition-all flex items-center gap-2" style="background:rgba(200,50,0,0.15);color:var(--amber);border:1px solid rgba(200,100,0,0.3)" aria-label="Stop streaming" data-icon="stop"> STOP</button>
                 </div>
-                <div class="flex items-center gap-1.5 mt-1.5 toolbar-row">
+                <div class="flex items-center gap-1.5 mt-2 toolbar-row">
                     <button id="voice-btn" class="toolbar-btn" title="Voice input" aria-label="Voice input" data-icon="mic"></button>
                     <span class="w-px h-3" style="background:rgba(255,255,255,0.06)"></span>
                     <button id="delta-toggle-btn" class="toolbar-btn" title="Delta Mode: Compare 4 models" aria-label="Toggle Delta Mode"><span data-icon="cpu"></span> Delta</button>
@@ -260,7 +265,22 @@
                     <button id="export-btn" class="toolbar-btn" title="Export conversation as markdown" aria-label="Export chat" data-icon="download"></button>
                 </div>
                 <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden">
-                <div class="flex justify-between items-center mt-1.5">
+                <!-- ═══ KNOWLEDGE GRAPH CHIP RAIL ═══════════════════════════════ -->
+                <div id="kg-rail-wrapper" class="mt-2 pt-2 border-t" style="border-color:rgba(255,255,255,0.05)">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[9px] font-bold uppercase tracking-[0.12em]" style="color:var(--text-tertiary)">
+                            🧠 Entities
+                        </span>
+                        <span id="kg-rail-count" class="text-[9px]" style="color:var(--text-tertiary)"></span>
+                    </div>
+                    <div id="knowledge-graph-canvas"
+                         class="flex gap-1.5 overflow-x-auto pb-1"
+                         style="scrollbar-width:none;-ms-overflow-style:none;min-height:24px">
+                        <!-- JS populates this -->
+                    </div>
+                </div>
+                <!-- ════════════════════════════════════════════════════════════ -->
+                <div class="flex justify-between items-center mt-2 pt-1.5 border-t" style="border-color:rgba(255,255,255,0.04)">
                     <div id="input-chars" class="text-[10px]" style="color:var(--text-tertiary)">0 characters</div>
                     <div class="flex items-center gap-2"><span id="active-model-indicator" class="text-[10px] hidden" style="color:var(--text-tertiary)">Model: <span id="active-model-indicator-name" class="font-bold" style="color:var(--green-1)"></span></span><span class="text-[10px]" style="color:var(--text-tertiary)">Enter to send · Shift+Enter for newline</span></div>
                 </div>
@@ -269,7 +289,7 @@
         <aside id="sidebar-right" class="col-span-12 lg:col-span-3 flex flex-col glass-panel rounded-lg overflow-hidden order-2 lg:order-3 max-lg:max-h-[40vh] max-lg:border-t max-lg:border-[var(--border-subtle)] max-lg:pt-0" role="region" aria-label="Model fleet selection">
             <div class="px-4 py-2 panel-header">
                 <h2 class="text-xs font-bold uppercase tracking-widest flex items-center gap-2" style="color:var(--text-secondary)" data-icon="cpu"> Fleet Selection</h2>
-                <div id="filter-bar" class="flex flex-wrap gap-1 mt-1.5" role="group" aria-label="Model provider filter">
+                <div id="filter-bar" class="flex flex-wrap gap-1.5 mt-2.5" role="group" aria-label="Model provider filter">
                     <button data-filter="all" class="filter-btn active px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:var(--green-5);border-color:var(--green-3);color:var(--green-1)">All</button>
                     <button data-filter="groq" class="filter-btn px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)"><span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:var(--green-0)"></span>Groq</span></button>
                     <button data-filter="openrouter" class="filter-btn px-2 py-0.5 text-[9px] font-bold border rounded uppercase tracking-wider" style="background:rgba(255,255,255,0.03);border-color:rgba(255,255,255,0.1);color:var(--text-tertiary)"><span class="inline-flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full inline-block" style="background:var(--amber)"></span>OR</span></button>
@@ -281,12 +301,20 @@
                 </div>
             </div>
             <input type="text" id="model-filter" placeholder="Filter models..." class="w-full rounded px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-[var(--green-2)] focus:ring-1 focus:ring-[var(--green-4)] transition-all placeholder-gray-600 mb-1.5" style="background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08)" aria-label="Filter model list">
-            <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1" id="model-list" role="listbox" aria-label="Available models" tabindex="0"></div>
-            <div class="py-2 px-3 border-t panel-header">
-                <div class="text-[10px] font-bold uppercase tracking-wider mb-1 inline-flex items-center gap-1" style="color:var(--text-tertiary)" data-icon="chart"> Model Profile</div>
-                <div id="model-profile" class="text-xs font-mono leading-relaxed" style="color:var(--text-secondary)">Select a model from the fleet to view detailed telemetry and capabilities...</div>
-                <div class="text-[10px] font-bold uppercase tracking-wider mt-2 mb-1 inline-flex items-center gap-1" style="color:var(--text-tertiary)" data-icon="bolt"> Knowledge Graph</div>
-                <canvas id="knowledge-graph-canvas" width="300" height="200"></canvas>
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1.5" id="model-list" role="listbox" aria-label="Available models" tabindex="0"></div>
+            <div class="py-4 px-4 border-t panel-header flex flex-col gap-4">
+                <div class="flex flex-col gap-2">
+                    <div class="text-[9px] font-bold uppercase tracking-[0.12em] pb-1.5 border-b flex items-center gap-1.5"
+                         style="color:var(--text-tertiary);border-color:rgba(255,255,255,0.05)"
+                         data-icon="chart"> Model Profile
+                    </div>
+                    <div id="model-profile"
+                         class="text-[11px] font-mono leading-relaxed"
+                         style="color:var(--text-secondary);min-height:40px">
+                        Select a model from the fleet to view telemetry...
+                    </div>
+                </div>
+
             </div>
         </aside>
     </main>

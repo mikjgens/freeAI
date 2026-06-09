@@ -798,91 +798,162 @@ const DomLayer = (() => {
     let _graphSim = null;
 
     function renderKnowledgeGraph(graph) {
-        const canvas = document.getElementById('knowledge-graph-canvas');
-        if (!canvas) return;
-        const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = Math.max(rect.width - 4, 300);
-        canvas.height = 140;
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width, h = canvas.height;
-        ctx.clearRect(0, 0, w, h);
+        const wrapper = document.getElementById('kg-rail-wrapper');
+        if (wrapper) {
+            wrapper.classList.toggle('kg-hidden', !graph || !graph.entities.length);
+        }
+
+        const rail = document.getElementById('knowledge-graph-canvas');
+        const countEl = document.getElementById('kg-rail-count');
+        if (!rail) return;
+
+        rail.innerHTML = '';
+
         if (!graph || !graph.entities.length) {
-            ctx.fillStyle = 'rgba(255,255,255,0.08)';
-            ctx.font = '11px JetBrains Mono, monospace';
-            ctx.textAlign = 'center';
-            ctx.fillText('Entities appear here as you chat', w / 2, h / 2 - 6);
-            ctx.fillStyle = 'rgba(255,255,255,0.04)';
-            ctx.font = '9px JetBrains Mono, monospace';
-            ctx.fillText('(every response is analyzed for concepts & relationships)', w / 2, h / 2 + 14);
+            rail.innerHTML = '<span style="font-size:9px;color:var(--text-tertiary);font-family:var(--font-mono);opacity:0.5">Entities appear as you chat...</span>';
+            if (countEl) countEl.textContent = '';
             return;
         }
 
-        const typeColors = { concept: '#00ff41', person: '#ffb347', decision: '#4ade80', question: '#ff4444' };
-        const nodes = graph.entities.map((e, i) => ({
-            ...e, x: w/2 + (Math.random() - 0.5) * w * 0.6, y: h/2 + (Math.random() - 0.5) * h * 0.6,
-            vx: 0, vy: 0, radius: 6 + Math.min(e.count || 1, 10) * 2,
-        }));
-        const links = graph.relationships.map(r => ({
-            source: nodes.findIndex(n => n.name === r.from),
-            target: nodes.findIndex(n => n.name === r.to),
-        })).filter(l => l.source >= 0 && l.target >= 0 && l.source !== l.target);
+        const typeColors = {
+            concept:  '#00ff41',
+            person:   '#ffb347',
+            decision: '#4ade80',
+            question: '#ff4444'
+        };
 
-        if (_graphSim) cancelAnimationFrame(_graphSim);
+        if (countEl) countEl.textContent = `${graph.entities.length} entity${graph.entities.length !== 1 ? 'ies' : 'y'}`;
 
-        function tick() {
-            if (!canvas.isConnected) return;
-            for (let i = 0; i < nodes.length; i++) {
-                nodes[i].vx += (w/2 - nodes[i].x) * 0.001;
-                nodes[i].vy += (h/2 - nodes[i].y) * 0.001;
-            }
-            for (let i = 0; i < nodes.length; i++) {
-                for (let j = i + 1; j < nodes.length; j++) {
-                    const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
-                    const dist = Math.max(Math.sqrt(dx*dx + dy*dy), 1);
-                    const force = 50 / (dist * dist);
-                    nodes[i].vx -= dx / dist * force; nodes[i].vy -= dy / dist * force;
-                    nodes[j].vx += dx / dist * force; nodes[j].vy += dy / dist * force;
+        const sorted = [...graph.entities].sort((a, b) => (b.count || 1) - (a.count || 1));
+
+        sorted.forEach(entity => {
+            const color = typeColors[entity.type] || '#888888';
+
+            const chip = document.createElement('div');
+            chip.title = `${entity.type} · mentioned ${entity.count || 1}×`;
+
+            chip.style.cssText = `
+                flex-shrink: 0;
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                background: rgba(255,255,255,0.04);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 20px;
+                padding: 3px 10px 3px 7px;
+                font-size: 10px;
+                font-family: var(--font-mono);
+                color: var(--text-secondary);
+                cursor: pointer;
+                transition: all 0.15s ease;
+                white-space: nowrap;
+                user-select: none;
+            `;
+
+            chip.innerHTML = `
+                <span style="
+                    width:6px;height:6px;border-radius:50%;
+                    background:${color};
+                    flex-shrink:0;
+                    box-shadow:0 0 4px ${color}66;
+                "></span>
+                ${entity.name}
+                <span style="
+                    font-size:8px;
+                    color:var(--text-tertiary);
+                    background:rgba(0,0,0,0.3);
+                    border-radius:8px;
+                    padding:1px 4px;
+                    margin-left:1px;
+                ">${entity.count || 1}</span>
+            `;
+
+            chip.addEventListener('mouseenter', () => {
+                chip.style.borderColor = color + '55';
+                chip.style.background = color + '0D';
+                chip.style.color = color;
+            });
+            chip.addEventListener('mouseleave', () => {
+                if (!chip.classList.contains('kg-selected')) {
+                    chip.style.borderColor = 'rgba(255,255,255,0.08)';
+                    chip.style.background = 'rgba(255,255,255,0.04)';
+                    chip.style.color = 'var(--text-secondary)';
                 }
-            }
-            for (const l of links) {
-                const dx = nodes[l.target].x - nodes[l.source].x, dy = nodes[l.target].y - nodes[l.source].y;
-                const dist = Math.max(Math.sqrt(dx*dx + dy*dy), 1);
-                const force = (dist - 80) * 0.005;
-                nodes[l.source].vx += dx / dist * force; nodes[l.source].vy += dy / dist * force;
-                nodes[l.target].vx -= dx / dist * force; nodes[l.target].vy -= dy / dist * force;
-            }
-            for (const n of nodes) {
-                if (n.pinned) continue;
-                n.vx *= 0.85; n.vy *= 0.85;
-                n.x += n.vx; n.y += n.vy;
-                n.x = Math.max(n.radius, Math.min(w - n.radius, n.x));
-                n.y = Math.max(n.radius, Math.min(h - n.radius, n.y));
-            }
-            ctx.clearRect(0, 0, w, h);
-            ctx.strokeStyle = 'rgba(0,255,65,0.1)';
-            ctx.lineWidth = 0.5;
-            for (const l of links) {
-                ctx.beginPath();
-                ctx.moveTo(nodes[l.source].x, nodes[l.source].y);
-                ctx.lineTo(nodes[l.target].x, nodes[l.target].y);
-                ctx.stroke();
-            }
-            for (const n of nodes) {
-                ctx.beginPath();
-                ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-                ctx.fillStyle = (typeColors[n.type] || '#888') + '44';
-                ctx.fill();
-                ctx.strokeStyle = (typeColors[n.type] || '#888');
-                ctx.lineWidth = n.pinned ? 2 : 1;
-                ctx.stroke();
-                ctx.fillStyle = '#d4d4d4';
-                ctx.font = '9px JetBrains Mono, monospace';
-                ctx.textAlign = 'center';
-                ctx.fillText(n.name.slice(0, 12), n.x, n.y + n.radius + 12);
-            }
-            _graphSim = requestAnimationFrame(tick);
-        }
-        tick();
+            });
+
+            chip.addEventListener('click', () => {
+                const wasSelected = chip.classList.contains('kg-selected');
+                rail.querySelectorAll('.kg-selected').forEach(c => {
+                    c.classList.remove('kg-selected');
+                    c.style.borderColor = 'rgba(255,255,255,0.08)';
+                    c.style.background = 'rgba(255,255,255,0.04)';
+                    c.style.color = 'var(--text-secondary)';
+                });
+                if (!wasSelected) {
+                    chip.classList.add('kg-selected');
+                    chip.style.borderColor = color + '88';
+                    chip.style.background = color + '14';
+                    chip.style.color = color;
+                    _showEntityRelationships(entity, graph, color);
+                } else {
+                    _hideEntityRelationships();
+                }
+            });
+
+            rail.appendChild(chip);
+        });
+
+        if (_graphSim) { cancelAnimationFrame(_graphSim); _graphSim = null; }
+    }
+
+    function _showEntityRelationships(entity, graph, color) {
+        _hideEntityRelationships();
+
+        const rels = (graph.relationships || []).filter(
+            r => r.from === entity.name || r.to === entity.name
+        );
+        if (!rels.length) return;
+
+        const wrapper = document.getElementById('kg-rail-wrapper');
+        if (!wrapper) return;
+
+        const tooltip = document.createElement('div');
+        tooltip.id = 'kg-rel-tooltip';
+        tooltip.style.cssText = `
+            margin-top: 6px;
+            padding: 6px 10px;
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 6px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        `;
+
+        rels.forEach(r => {
+            const chip = document.createElement('span');
+            chip.style.cssText = `
+                font-size: 9px;
+                font-family: var(--font-mono);
+                color: var(--text-tertiary);
+                background: rgba(255,255,255,0.03);
+                border: 1px solid rgba(255,255,255,0.06);
+                border-radius: 20px;
+                padding: 2px 8px;
+                white-space: nowrap;
+            `;
+            const fromColor = r.from === entity.name ? color : 'var(--amber)';
+            const toColor   = r.to   === entity.name ? color : 'var(--amber)';
+            chip.innerHTML = `<span style="color:${fromColor}">${r.from}</span> <span style="opacity:0.4">→</span> <span style="opacity:0.5;font-size:8px">${r.label||''}</span> <span style="opacity:0.4">→</span> <span style="color:${toColor}">${r.to}</span>`;
+            tooltip.appendChild(chip);
+        });
+
+        wrapper.appendChild(tooltip);
+    }
+
+    function _hideEntityRelationships() {
+        const old = document.getElementById('kg-rel-tooltip');
+        if (old) old.remove();
     }
 
     function renderSessionTimeline() {
