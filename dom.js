@@ -135,7 +135,7 @@ const DomLayer = (() => {
             _modelItemMap.set(model.provider + ':' + model.modelId, div);
             const toolIcon = model.tools === 'Function Calling' ? icon('wrench', 'w-3 h-3 align-text-top') : model.tools === 'Built-in Tools' ? icon('cpu', 'w-3 h-3 align-text-top') : '';
             const tagsHtml = model.tags ? model.tags.slice(0, 3).map(t => '<span class="inline-block text-[7px] px-1 py-0.5 rounded bg-gray-800/60 border border-gray-700/50 text-gray-500 leading-none">' + escapeHtml(t) + '</span>').join('') : '';
-            const dotColors = { groq: 'var(--green-0)', openrouter: 'var(--amber)', google: 'var(--green-2)', nvidia: 'rgba(200,200,255,0.5)' };
+            const dotColors = { groq: 'var(--green-0)', openrouter: 'var(--amber)' };
             const dotColor = dotColors[model.provider] || 'var(--text-tertiary)';
             div.innerHTML = '<span class="mt-0.5 inline-flex"><span class="w-2 h-2 rounded-full" style="background:' + dotColor + '"></span></span><div class="flex-1 min-w-0"><div class="font-bold ' + (isCustom ? 'text-blue-300' : 'text-gray-200') + ' truncate flex items-center gap-2">' + escapeHtml(model.name) + ' ' + toolIcon + (!isVerified && Object.keys(validatedModels).length > 0 ? '<span class="text-[8px] px-1 rounded" style="color:var(--amber);border:1px solid rgba(255,180,71,0.3)">UNVERIFIED</span>' : '') + (isCustom ? '<span class="text-[8px] text-blue-400 border border-blue-400/30 px-1 rounded">CUSTOM</span>' : '') + '</div><div class="text-gray-500 text-[10px] truncate">' + escapeHtml(model.desc) + '</div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-1">' + tagsHtml + '</div>' : '') + '</div>' + (isCustom ? '<button class="custom-delete-btn text-red-400 hover:text-red-300 text-xs px-1">&times;</button>' : '');
             div.onclick = (e) => { if (e.target.closest('.custom-delete-btn')) return; App.selectModel(model); };
@@ -452,6 +452,22 @@ const DomLayer = (() => {
         if (preview) preview.classList.add('hidden');
     }
 
+    function showVisionSuggestion(visionModel) {
+        const bar = document.getElementById('vision-suggestion');
+        const name = document.getElementById('vision-suggestion-model');
+        const btn = document.getElementById('switch-vision-btn');
+        if (!bar || !name || !btn) return;
+        name.textContent = visionModel.name;
+        btn.dataset.switchProvider = visionModel.provider;
+        btn.dataset.switchModelId = visionModel.modelId;
+        bar.classList.remove('hidden');
+    }
+
+    function hideVisionSuggestion() {
+        const bar = document.getElementById('vision-suggestion');
+        if (bar) bar.classList.add('hidden');
+    }
+
     function getModelItem(modelId, provider) {
         return _modelItemMap.get(provider + ':' + modelId) || null;
     }
@@ -674,10 +690,19 @@ const DomLayer = (() => {
             const voice = _resolveVoice(profile.hint);
             if (voice) utterance.voice = voice;
         }
-        utterance.onstart = () => AvatarEngine.startSpeaking();
-        utterance.onend = () => { AvatarEngine.stopSpeaking(); if (onEnd) onEnd(); };
-        utterance.onerror = () => { AvatarEngine.stopSpeaking(); if (onEnd) onEnd(); };
+        utterance.onstart = () => {
+            AvatarEngine.startSpeaking();
+            const btn = document.getElementById('stop-speak-btn');
+            if (btn) btn.classList.remove('hidden');
+        };
+        utterance.onend = () => { AvatarEngine.stopSpeaking(); hideStopSpeak(); if (onEnd) onEnd(); };
+        utterance.onerror = () => { AvatarEngine.stopSpeaking(); hideStopSpeak(); if (onEnd) onEnd(); };
         speechSynthesis.speak(utterance);
+    }
+
+    function hideStopSpeak() {
+        const btn = document.getElementById('stop-speak-btn');
+        if (btn) btn.classList.add('hidden');
     }
 
     function getVoiceProfiles() { return VOICE_PROFILES; }
@@ -764,12 +789,23 @@ const DomLayer = (() => {
 
     function renderKnowledgeGraph(graph) {
         const canvas = document.getElementById('knowledge-graph-canvas');
-        if (!canvas || !graph.entities.length) {
-            if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
-            return;
-        }
+        if (!canvas) return;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = Math.max(rect.width - 4, 300);
+        canvas.height = 200;
         const ctx = canvas.getContext('2d');
         const w = canvas.width, h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        if (!graph || !graph.entities.length) {
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
+            ctx.font = '11px JetBrains Mono, monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('Entities appear here as you chat', w / 2, h / 2 - 6);
+            ctx.fillStyle = 'rgba(255,255,255,0.04)';
+            ctx.font = '9px JetBrains Mono, monospace';
+            ctx.fillText('(every response is analyzed for concepts & relationships)', w / 2, h / 2 + 14);
+            return;
+        }
 
         const typeColors = { concept: '#00ff41', person: '#ffb347', decision: '#4ade80', question: '#ff4444' };
         const nodes = graph.entities.map((e, i) => ({
@@ -859,6 +895,7 @@ const DomLayer = (() => {
     function stopSpeaking() {
         if (window.speechSynthesis) window.speechSynthesis.cancel();
         AvatarEngine.stopSpeaking();
+        hideStopSpeak();
     }
 
     return {
@@ -868,7 +905,7 @@ const DomLayer = (() => {
         updateTimestamp, updateLatency, showError, renderToolCallCard,
         archiveMessages, addHorizonBanner, displayImages, showImageLightbox, downloadImage,
         updatePromptCharCount, updateDocUI, updateSessionStats, scrollToBottom, toggleVault,
-        renderConversation, showAttachmentPreview, removeAttachmentPreview, syncFleetSelection,
+        renderConversation, showAttachmentPreview, removeAttachmentPreview, showVisionSuggestion, hideVisionSuggestion, syncFleetSelection,
         updateTokenFlow, exportChat, exportHistoryJSON, importHistoryJSON, updateRagIndicator, speakResponse, stopSpeaking,
         renderSystemCard, annotateResponse, renderDeltaComparison, renderKnowledgeGraph, renderSessionTimeline, getVoiceProfiles,
     };

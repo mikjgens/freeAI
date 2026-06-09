@@ -28,21 +28,7 @@ const models = [
     { provider: 'openrouter', color: '🟠', name: 'Liquid LFM 1.2B Think', desc: 'Edge-device reasoning', ctx: '32K', tools: 'None', modelId: 'liquid/lfm-2.5-1.2b-thinking:free', type: 'chat', tags: ['edge', 'small', 'reasoning'], weakness: 'tiny context, limited capability' },
     { provider: 'openrouter', color: '🟠', name: 'Liquid LFM 1.2B Fast', desc: 'On-device, edge inference', ctx: '32K', tools: 'None', modelId: 'liquid/lfm-2.5-1.2b-instruct:free', type: 'chat', tags: ['edge', 'small', 'fast'], weakness: 'tiny context, limited capability' },
     { provider: 'openrouter', color: '🟠', name: 'Nemotron Nano 12B VL', desc: 'Vision+Docs model', ctx: '128K', tools: 'None', modelId: 'nvidia/nemotron-nano-12b-v2-vl:free', type: 'chat', vision: true, tags: ['vision', 'docs', 'ocr'], weakness: 'no tool support' },
-    { provider: 'google', color: '🔵', name: 'Gemini 3.5 Flash', desc: 'Latest — 30 RPM', ctx: '1M', tools: 'Function Calling', modelId: 'gemini-3.5-flash', type: 'chat', vision: true, tags: ['agentic', 'coding', 'multimodal', 'frontier'], weakness: 'paid tier — free quota limited to 30 RPM' },
-    { provider: 'google', color: '🔵', name: 'Gemini 3.1 Flash-Lite', desc: 'Budget — 30 RPM', ctx: '1M', tools: 'Function Calling', modelId: 'gemini-3.1-flash-lite', type: 'chat', vision: true, tags: ['budget', 'efficient', 'vision', 'fast'], weakness: 'less capable than full Flash models' },
-    { provider: 'google', color: '🔵', name: 'Gemini 2.5 Flash-Lite', desc: 'Fastest — 15 RPM', ctx: '1M', tools: 'Function Calling', modelId: 'gemini-2.5-flash-lite', type: 'chat', vision: true, tags: ['fastest', 'budget', 'vision'], weakness: 'older gen, reduced intelligence' },
-    { provider: 'nvidia', color: '🟣', name: 'Gemma 4 31B (NIM)', desc: 'TOP — Frontier Reasoning', ctx: '256K', tools: 'Function Calling', modelId: 'google/gemma-4-31b-it', type: 'chat', tags: ['reasoning', 'frontier', 'nim-deployed'], weakness: 'NVIDIA NIM may have separate pricing' },
-    { provider: 'nvidia', color: '🟣', name: 'Mistral Small 4 119B', desc: '18M calls/mo', ctx: '256K', tools: 'Function Calling', modelId: 'mistralai/mistral-small-4-119b-2603', type: 'chat', tags: ['popular', 'production', 'general-purpose'], weakness: 'large model, higher latency' },
-    { provider: 'nvidia', color: '🟣', name: 'Mistral Medium 3.5 128B', desc: 'Strong general-purpose', ctx: '256K', tools: 'Function Calling', modelId: 'mistralai/mistral-medium-3.5-128b', type: 'chat', tags: ['general-purpose', 'balanced', 'production'], weakness: 'medium — not best-in-class at any single task' },
-    { provider: 'nvidia', color: '🟣', name: 'MiniMax M2.7', desc: '230B MoE', ctx: '128K', tools: 'Function Calling', modelId: 'minimaxai/minimax-m2.7', type: 'chat', tags: ['moe', 'large', 'efficient'], weakness: 'less community testing vs Mistral/Llama' },
-    { provider: 'nvidia', color: '🟣', name: 'Kimi K2.6 (NIM)', desc: '256K ctx', ctx: '256K', tools: 'Function Calling', modelId: 'moonshotai/kimi-k2.6', type: 'chat', tags: ['long-context', 'agentic'], weakness: 'ecosystem less mature in English' },
-    { provider: 'nvidia', color: '🟣', name: 'Nemotron-3 Super (NIM)', desc: 'Agentic, multi-agent RL', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nemotron-3-super-120b-a12b', type: 'chat', tags: ['agentic', 'multi-agent', 'rl'], weakness: 'large, may be slow' },
-    { provider: 'nvidia', color: '🟣', name: 'Nemotron Nano Omni (NIM)', desc: 'Reasoning', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nvidia-nemotron-nano-9b-v2', type: 'chat', tags: ['reasoning', 'nano', 'efficient'], weakness: '9B — limited depth vs larger models' },
-    { provider: 'nvidia', color: '🟣', name: 'Qwen3.5 122B', desc: 'New gen', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3.5-122b-a10b', type: 'chat', tags: ['new-gen', 'large', 'moe'], weakness: 'newly released — less battle-tested' },
-    { provider: 'nvidia', color: '🟣', name: 'Qwen3.5 397B', desc: 'Massive MoE', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3.5-397b-a17b', type: 'chat', tags: ['massive', 'moe', 'frontier'], weakness: 'very large — high latency, may hit rate limits' },
-    { provider: 'nvidia', color: '🟣', name: 'Qwen3 Next 80B', desc: 'Fast', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3-next-80b-a3b-instruct', type: 'chat', tags: ['fast', 'moe', 'efficient'], weakness: 'less capable than full-size Qwen models' },
-    { provider: 'nvidia', color: '🟣', name: 'GLM 5.1', desc: 'Zhipu Latest', ctx: '128K', tools: 'Function Calling', modelId: 'z-ai/glm-5.1', type: 'chat', tags: ['chinese', 'latest', 'zhipu'], weakness: 'English performance may trail English-focused models' },
-    { provider: 'nvidia', color: '🟣', name: 'Seed OSS 36B', desc: 'ByteDance', ctx: '128K', tools: 'Function Calling', modelId: 'bytedance/seed-oss-36b-instruct', type: 'chat', tags: ['bytedance', 'open-weights', 'mid-size'], weakness: 'less community adoption than Mistral/Llama' }
+
 ];
 
 const HARDCODED_TOOLS = [
@@ -55,15 +41,12 @@ const HARDCODED_TOOLS = [
 const PROVIDER_ENDPOINTS = {
     groq: 'https://api.groq.com/openai/v1/chat/completions',
     openrouter: 'https://openrouter.ai/api/v1/chat/completions',
-    nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
 };
 
 const DEFAULT_MODEL = { provider: 'groq', modelId: 'llama-3.3-70b-versatile' };
 const FALLBACK_CHAIN = [
     { provider: 'groq', modelId: 'llama-3.3-70b-versatile' },
     { provider: 'openrouter', modelId: 'meta-llama/llama-3.3-70b-instruct:free' },
-    { provider: 'google', modelId: 'gemini-3.5-flash' },
-    { provider: 'nvidia', modelId: 'google/gemma-4-31b-it' },
 ];
 
 const MAX_HISTORY = 100;

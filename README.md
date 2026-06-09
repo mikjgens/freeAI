@@ -8,17 +8,17 @@ Multi-model LLM chat interface with **ambient intelligence**. No build step, no 
 
 ## Features
 
-- **43 models** across Groq, OpenRouter, Google, and NVIDIA
+- **27 models** across Groq and OpenRouter (free tier)
 - **Streaming responses** with typewriter cursor and markdown rendering
-- **TF-IDF RAG** — sentence-aware chunking on reference documents
+- **TF-IDF RAG** — sentence-aware chunking on reference documents (drag-drop or click to upload)
 - **Pixel-art avatar** — 32x32 sprite engine with blink/mouth animation
 - **Audio cues** — Web Audio API chiptune oscillator (pentatonic arpeggio per response)
-- **Vision support** — image attachments on compatible models
+- **Vision support** — image attachments with auto-suggest to switch to a vision-capable model
 - **Function calling** — local tools (time, math, web search, UI state)
-- **Auto failover** — walks provider chain if one is unavailable
+- **Auto failover** — walks provider chain if one is unavailable, with retry+backoff on rate limits
 - **Context meter** — live token usage bar in header
 - **System prompt editor** + per-session reference docs
-- **Export/import** chat history as JSON
+- **Export/import** chat history as JSON or Markdown
 - **Persistent state** — model selection, API keys, sessions survive refresh
 
 ### Ambient Intelligence (v3.0)
@@ -28,17 +28,15 @@ Multi-model LLM chat interface with **ambient intelligence**. No build step, no 
 | **Temporal Cognition** | Session timeline sidebar. Past sessions color-coded and summarized. System prompt auto-injects user session context. Ctrl+L to close a session — it persists for later recall. |
 | **Model Personality Delta** | Toggle Delta Mode to fan a query out to 4 diverse models simultaneously (fast, deep-reasoning, creative, and your current). Responses render side-by-side in a comparison grid. |
 | **Ambient Session Intelligence** | A "session watcher" runs every 4 messages in the background, looking for contradictions, unresolved questions, and drift. It surfaces non-intrusive `// Notice:` cards with clickable follow-ups. |
-| **Knowledge Graph** | Entity extraction runs on each response. A canvas-based force-directed graph accumulates per session in the right sidebar — nodes color-coded by type (concept, person, decision, question). |
-| **Adversarial Shadow Model** | A second, cheap model silently audits every response. Sentences get green (agreed), amber (uncertain), or red (disputed) underlines. Hover to see the shadow's concern. |
+| **Knowledge Graph** | Entity extraction runs on every response (local keyword extraction + optional sub-LLM). A canvas-based force-directed graph accumulates in the right sidebar — nodes color-coded by type (concept, person, decision, question). |
+| **Adversarial Shadow Model** | A second, cheap model silently audits every 4th response. Sentences get green (agreed), amber (uncertain), or red (disputed) underlines. Hover to see the shadow's concern. |
 
 ## Providers
 
 | Provider | Models | Auth |
 |----------|--------|------|
 | Groq | 8 | API key |
-| OpenRouter | 19 | API key |
-| Google | 3 | API key |
-| NVIDIA | 13 | API key |
+| OpenRouter | 19 | API key (free tier) |
 
 ## Getting Started
 
@@ -54,7 +52,7 @@ Multi-model LLM chat interface with **ambient intelligence**. No build step, no 
 |----------|--------|
 | `Enter` | Send message |
 | `Shift+Enter` | Newline in input |
-| `Escape` | Stop streaming / close modals / cancel voice input |
+| `Escape` | Kill TTS audio → stop streaming → cancel voice input → close modals |
 | `Ctrl+L` | Clear chat + end current session |
 | `Ctrl+Shift+C` | Copy last AI response to clipboard |
 
@@ -64,18 +62,29 @@ Create a `.env` file in the project root:
 
 ```
 GROQ_API_KEY=gsk_your_key_here
-GEMINI_API_KEY=AIza_your_key_here
-NVIDIA_API_KEY=nvapi-your-key-here
 OPENROUTER_API_KEY=sk-or-v1-your-key-here
 ```
 
 Load it via the vault's **.env** button. Keys are stored in `localStorage` only — never sent to any server except the provider APIs.
 
+### Free Tier Guardrails
+
+Built-in protections for the free-tier constraints of Groq and OpenRouter:
+
+| Guardrail | Behavior |
+|-----------|----------|
+| **Rate limit retry** | 429/413 responses auto-retry up to 3x with exponential backoff, parsing `Retry-After` from provider metadata |
+| **TPM-aware trimming** | History trimmed to 4K token budget for Groq free tier before every send |
+| **Image data scrubbing** | After sending, base64 image URLs in history are replaced with `[image]` placeholder — prevents localStorage 28MB bloat |
+| **Sub-call cancellation** | Background entity extraction / shadow audit / session watcher aborted when a new message is sent |
+| **Auto fallback revert** | Falls back to next provider on error, auto-reverts to your preferred model on the next send |
+| **Session pruning** | `sessionHistory` capped at 20 sessions |
+
 ## Architecture
 
 ```
 index.html       — HTML + CSS + entry point
-models.js        — Fleet data (43 models) and constants
+models.js        — Fleet data (27 models) and constants
 rag.js           — TF-IDF chunking (sentence-aware), indexing, retrieval
 icons.js         — Inline SVG icon definitions
 sound.js         — Web Audio API chiptune oscillator
@@ -86,8 +95,8 @@ state.js         — Centralized state with pub/sub, streaming counter, token ca
 dom.js           — All DOM rendering: chat, model list, context meter, streaming output,
                    delta comparison grid, system cards, shadow annotations, knowledge graph canvas
 tools.js         — Local tool functions (time, math, web search, UI state)
-api.js           — Network layer — OpenAI-compatible SSE + Google streamGenerateContent,
-                   auto failover across providers
+api.js           — Network layer — OpenAI-compatible SSE,
+                   auto failover between providers
 app.js           — Orchestrator: sendMessage, delta queries, ambient watcher, shadow audit,
                    entity extraction, event wiring, voice input, init
 ```
@@ -124,7 +133,7 @@ Sessions are stored in `localStorage` under `war_chest_history` as versioned JSO
 }
 ```
 
-v1 flat arrays auto-migrate on first load. The session timeline in the left sidebar shows the last 10 sessions.
+v1 flat arrays auto-migrate on first load. The session timeline in the left sidebar shows the last 20 sessions (auto-pruned).
 
 ### Reactive State
 
@@ -146,7 +155,7 @@ No manual `DomLayer.updateX()` calls scattered through business logic. Adding a 
 
 | Optimization | Impact |
 |-------------|--------|
-| Provider validation: 4 parallel fetches (was 40+ sequential) | ~8s → ~1s startup |
+| Provider validation: 2 parallel fetches | ~1s startup |
 | Token estimate cache (invalidated only on push) | 0-cost context meter during streaming |
 | Model item Map cache | O(1) lookup on model switch |
 | Debounced localStorage writes (800ms) | Single write per tool-loop, not 10 |

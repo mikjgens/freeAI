@@ -18,6 +18,8 @@ const StateManager = (() => {
         sessionSummaries: [],
         currentSessionStart: Date.now(),
         sessionsLoaded: false,
+        lastFallbackFrom: null,
+        subCallAbort: null,
     };
     const _listeners = {};
     let _tokenCache = { count: 0, historyLength: -1 };
@@ -117,6 +119,7 @@ const StateManager = (() => {
             messages: _state.conversationHistory.slice(-MAX_HISTORY),
         };
         _state.sessionHistory.push(sessionData);
+        if (_state.sessionHistory.length > 20) _state.sessionHistory = _state.sessionHistory.slice(-20);
         _state.currentSessionId = crypto.randomUUID();
         _state.currentSessionStart = Date.now();
         _state.conversationHistory = [{ role: 'system', content: compiledPrompt() }];
@@ -152,6 +155,7 @@ const StateManager = (() => {
             knowledgeGraph: { entities: [], relationships: [] },
             sessionHistory: [], sessionSummaries: [],
             currentSessionStart: Date.now(), sessionsLoaded: true,
+            lastFallbackFrom: null, subCallAbort: null,
         });
         (_listeners['*'] || []).forEach(fn => fn(_state));
     }

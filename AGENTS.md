@@ -1,6 +1,6 @@
 # freeAI — War Chest Command Center
 
-Multi-file HTML + JS chat interface for multiple LLM providers. No build step, no dependencies.
+Multi-file HTML + JS chat interface for Groq and OpenRouter (free tier). No build step, no dependencies.
 
 ## Usage
 
@@ -21,7 +21,7 @@ The active model persists across page refreshes. On first visit, the fallback ch
 | **StateManager** | Centralized store with `get`/`set`/`subscribe`/`pushMessage`/`trimHistoryForModel`. All persistent state flows through this module. Uses `localStorage` with `war_chest_*` prefix. |
 | **DomLayer** | All DOM creation and manipulation — rendering, toasts, modals, streaming output, context meter, tool call cards, export, TTS. Owns `marked.parse()` + `DOMPurify.sanitize()`. |
 | **ToolExecutor** | Local tool functions (`get_system_time`, `evaluate_math`, `get_ui_state`, `web_search`) with blind-retry guard (aborts after 2 identical consecutive calls). |
-| **ApiLayer** | Network layer — `streamOpenAI` (SSE for OpenAI-compatible endpoints), `streamGoogle` (Google's `streamGenerateContent`), `callProvider` (dispatch with auto pre-stream failover). |
+| **ApiLayer** | Network layer — `streamOpenAI` (SSE for OpenAI-compatible endpoints), `callProvider` (dispatch with auto pre-stream failover). |
 | **App** | Orchestrator — `sendMessage`, `selectModel`, `stopStreaming`, `wipeSystem`, `saveKeys`, voice input, regenerate, all event wiring, `init()`. |
 
 ## Providers
@@ -30,17 +30,13 @@ The active model persists across page refreshes. On first visit, the fallback ch
 |----------|----------|------|
 | Groq | `api.groq.com/openai/v1/chat/completions` | Bearer token |
 | OpenRouter | `openrouter.ai/api/v1/chat/completions` | Bearer token |
-| Google | `generativelanguage.googleapis.com/v1beta/models/…` | URL query key |
-| NVIDIA NIM | `integrate.api.nvidia.com/v1/chat/completions` | Bearer token |
 
-Groq / OpenRouter / NVIDIA use the OpenAI-compatible streaming API. Google uses its own `streamGenerateContent` endpoint with function calling support.
+Both use the OpenAI-compatible streaming API — no custom streaming path needed.
 
-## Model Fleet (43 models)
+## Model Fleet (27 models)
 
 - **Groq** (8) — 30 RPM, no CC required
 - **OpenRouter** (19) — 20 RPM on `:free` endpoints
-- **Google** (3) — 10–30 RPM (Flash variants)
-- **NVIDIA** (13) — ~40 RPM, no CC required
 
 Models are filtered by provider and capability (Vision / Tools / Fast). Custom models can be added via `localStorage`.
 

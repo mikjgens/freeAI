@@ -10,7 +10,7 @@ const App = (() => {
         const input = document.getElementById('terminal-input');
         const msg = input.value.trim();
         const attachment = StateManager.get('pendingAttachment');
-        const selectedModel = StateManager.get('selectedModel');
+        let selectedModel = StateManager.get('selectedModel');
         const history = StateManager.get('conversationHistory');
         if ((!msg && !attachment) || StateManager.isStreaming()) {
             if (!msg && !attachment && !StateManager.isStreaming()) DomLayer.showToast('warning', 'Type a message or attach an image before sending.');
@@ -24,6 +24,23 @@ const App = (() => {
         if (!selectedModel) { DomLayer.showError('No model selected. Click a model in the fleet panel first.'); return; }
         if (selectedModel.type !== 'chat') { DomLayer.showError('Cannot chat with ' + selectedModel.name + ' \u2014 it is a ' + selectedModel.type + ' model.'); return; }
         if (attachment && !selectedModel.vision) { DomLayer.showError(selectedModel.name + ' does not support vision. Select a model with vision capability or remove the attachment.'); return; }
+        // #4: Cancel any pending sub-calls (entity extraction, shadow audit, watcher)
+        const prevAbort = StateManager.get('subCallAbort');
+        if (prevAbort) { try { prevAbort.abort(); } catch (e) {} }
+        const subCtrl = new AbortController();
+        StateManager.set('subCallAbort', subCtrl);
+        // #5: Auto-revert fallback model on next send
+        const lastFallback = StateManager.get('lastFallbackFrom');
+        if (lastFallback) {
+            StateManager.set('lastFallbackFrom', null);
+            const origModel = [...models, ...StateManager.get('customModels')].find(
+                m => m.provider === lastFallback.provider && m.modelId === lastFallback.modelId
+            );
+            if (origModel) {
+                selectedModel = origModel;
+                StateManager.set('selectedModel', origModel);
+            }
+        }
         StateManager.recompileSystemMessage();
         const ragEnabled = StateManager.get('ragEnabled');
         const ragChunks = StateManager.get('ragChunks') || [];
@@ -46,6 +63,13 @@ const App = (() => {
             const dropped = StateManager.trimHistoryForModel(selectedModel.ctx, 2048 + msgTokens);
             if (dropped > 0) { DomLayer.archiveMessages(StateManager.get('conversationHistory').length - 1); DomLayer.addHorizonBanner(); }
         }
+        // #2: TPM-aware trimming for low-limit free tier models
+        const tpmBudget = selectedModel.provider === 'groq' ? 4000 : 8000;
+        if (currentTokens + msgTokens + 2048 > tpmBudget) {
+            const overCtx = parseCtx(String(Math.floor(tpmBudget / 1024)) + 'K');
+            const dropped = StateManager.trimHistoryForModel(String(Math.floor(tpmBudget / 1024)) + 'K', 2048 + msgTokens);
+            if (dropped > 0) { DomLayer.archiveMessages(StateManager.get('conversationHistory').length - 1); DomLayer.addHorizonBanner(); DomLayer.showInfoInStatus('Trimmed ' + dropped + ' messages to fit free tier TPM budget'); }
+        }
         _aiNoteIdx = 0;
         playSound('click');
         const userMsgId = crypto.randomUUID();
@@ -65,6 +89,20 @@ const App = (() => {
         StateManager.set('lastToolCallSig', null);
         StateManager.set('lastToolCallRepeat', 0);
         startStream();
+        // #3: Truncate image data URLs after send to prevent localStorage bloat
+        if (attachment) {
+            setTimeout(() => {
+                const msg = StateManager.get('conversationHistory').find(m => m._id === userMsgId);
+                if (msg && Array.isArray(msg.content)) {
+                    msg.content = msg.content.map(p => {
+                        if (p.type === 'image_url' && p.image_url?.url?.startsWith('data:'))
+                            return { type: 'text', text: '[image previously attached]' };
+                        return p;
+                    });
+                    StateManager.saveConversation();
+                }
+            }, 500);
+        }
     }
 
     async function sendDeltaQuery(msg) {
@@ -76,10 +114,12 @@ const App = (() => {
             .filter(m => m.type === 'chat' && keys[m.provider]);
         const fast = candidates.find(m => m.tags?.includes('fastest') || m.tags?.includes('speed')) || candidates[0];
         const deep = candidates.find(m => (m.tags?.includes('reasoning') || m.tags?.includes('deep-logic')) && m.modelId !== fast?.modelId) || candidates[1];
-        const creative = candidates.find(m => m.provider === 'google' && m.modelId !== fast?.modelId && m.modelId !== deep?.modelId) || candidates[2];
+        const creative = candidates.find(m => m.provider === 'openrouter' && m.tags?.includes('vision') && m.modelId !== fast?.modelId && m.modelId !== deep?.modelId) || candidates[2];
         const modelsToCall = [...new Set([selectedModel, fast, deep, creative].filter(Boolean))].slice(0, 4);
 
         if (!modelsToCall.length) { DomLayer.showError('No models available for Delta Mode. Add API keys in Vault.'); return; }
+
+        if (modelsToCall.length >= 3) DomLayer.showInfoInStatus('Delta Mode fires ' + modelsToCall.length + ' simultaneous API calls. Free tier may rate-limit.');
 
         const userMsgId = crypto.randomUUID();
         DomLayer.addUserMessage(msg, null, userMsgId);
@@ -289,17 +329,21 @@ const App = (() => {
             },
             onToolStart: () => DomLayer.updateTerminalStatus('info', 'Executing Tool...'),
             onFallback: (fbModel, failedModel) => {
+                StateManager.set('lastFallbackFrom', { provider: failedModel.provider, modelId: failedModel.modelId });
                 const notice = document.createElement('div');
                 notice.className = 'text-[10px] font-mono border-l-2 pl-2 mb-1';
                 notice.style.cssText = 'color:var(--amber);border-color:rgba(255,180,71,0.3)';
-                notice.textContent = '[SYSTEM: ' + failedModel.provider.toUpperCase() + ' FAILED \u2192 FALLBACK TO ' + fbModel.provider.toUpperCase() + ' (' + fbModel.name + ')]';
+                notice.textContent = '[SYSTEM: ' + failedModel.provider.toUpperCase() + ' (' + failedModel.name + ') FAILED \u2192 FALLBACK TO ' + fbModel.provider.toUpperCase() + ' (' + fbModel.name + ')]';
                 document.getElementById('terminal-output')?.appendChild(notice);
                 playSound('error');
                 setTimeout(() => playSound('select'), 80);
                 DomLayer.syncFleetSelection(fbModel);
                 DomLayer.updateTerminalStatus('standby');
             },
-            onFallbackNotice: (errMsg) => DomLayer.showInfoInStatus(errMsg + ' — attempting fallback...'),
+            onFallbackNotice: (errMsg) => {
+                console.warn('[API] ' + errMsg);
+                DomLayer.showInfoInStatus(errMsg + ' — attempting fallback...');
+            },
             signal: abortCtrl.signal,
         });
     }
@@ -329,10 +373,12 @@ const App = (() => {
 
         const wc = (StateManager.get('watcherMessageCount') || 0) + 1;
         StateManager.set('watcherMessageCount', wc);
-        if (wc >= 4 && !aborted && finalText) {
-            StateManager.set('watcherMessageCount', 0);
-            setTimeout(() => checkSessionIntelligence(), 1500);
-            setTimeout(() => runShadowAudit(finalText, streamState.container), 500);
+        if (!aborted && finalText) {
+            if (wc >= 4) {
+                StateManager.set('watcherMessageCount', 0);
+                setTimeout(() => checkSessionIntelligence(), 1500);
+                setTimeout(() => runShadowAudit(finalText, streamState.container), 500);
+            }
             setTimeout(() => extractEntities(finalText), 2000);
         }
     }
@@ -357,6 +403,7 @@ const App = (() => {
         const prompt = 'Analyze this conversation. Return ONLY a JSON object: {"contradictions":[],"unresolved_questions":[],"drift_events":[],"recommendation":"","should_intervene":false}\n\n' + recent;
 
         let full = '';
+        const subSignal = StateManager.get('subCallAbort')?.signal;
         ApiLayer.callProvider(
             [{ role: 'user', content: prompt }],
             cheapModel,
@@ -376,7 +423,7 @@ const App = (() => {
                 onFallback: () => {},
                 onFallbackNotice: () => {},
             },
-            new AbortController().signal
+            (subSignal || new AbortController().signal)
         );
     }
 
@@ -400,6 +447,7 @@ const App = (() => {
         const prompt = 'Audit this answer. Return ONLY a JSON array: [{"sentence_index":0,"confidence":"high|medium|low","concern":null|"reason"}]\n\nQuestion: ' + question.slice(0, 400) + '\nAnswer: ' + responseText.slice(0, 1500);
 
         let full = '';
+        const subSignal = StateManager.get('subCallAbort')?.signal;
         ApiLayer.callProvider(
             [{ role: 'user', content: prompt }],
             shadowModel,
@@ -419,11 +467,14 @@ const App = (() => {
                 onFallback: () => {},
                 onFallbackNotice: () => {},
             },
-            new AbortController().signal
+            (subSignal || new AbortController().signal)
         );
     }
 
     function extractEntities(responseText) {
+        // Always run local extraction first
+        localEntityExtraction(responseText);
+
         const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
         const cheapModel = [...models].find(m =>
             m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
@@ -439,6 +490,7 @@ const App = (() => {
         const prompt = 'Extract entities and relationships from this exchange. Return ONLY JSON: {"entities":[{"name":"...","type":"concept|person|decision|question"}],"relationships":[{"from":"...","to":"...","label":"..."}]}\n\nUser: ' + context + '\nAI: ' + responseText.slice(0, 1000);
 
         let full = '';
+        const subSignal = StateManager.get('subCallAbort')?.signal;
         ApiLayer.callProvider(
             [{ role: 'user', content: prompt }],
             cheapModel,
@@ -470,8 +522,39 @@ const App = (() => {
                 onFallback: () => {},
                 onFallbackNotice: () => {},
             },
-            new AbortController().signal
+            (subSignal || new AbortController().signal)
         );
+    }
+
+    function localEntityExtraction(text) {
+        const skipWords = new Set(['This', 'That', 'These', 'Those', 'Here', 'There', 'It', 'They', 'We', 'You', 'I', 'He', 'She', 'The', 'A', 'An', 'And', 'Or', 'But', 'Because', 'However', 'Therefore', 'Also', 'Then', 'Now', 'First', 'Second', 'Third', 'Last', 'Next', 'Previous', 'Each', 'Every', 'Some', 'Any', 'All', 'Both', 'Neither', 'Either']);
+        const found = new Set();
+        const graph = StateManager.get('knowledgeGraph');
+        // Extract capitalized multi-word phrases (potential named entities)
+        const namedMatches = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b/g) || [];
+        for (const name of namedMatches) {
+            if (skipWords.has(name) || name.length < 4) continue;
+            const existing = graph.entities.find(e => e.name === name);
+            if (existing) { existing.count = (existing.count || 1) + 1; found.add(name); }
+        }
+        // Extract UPPERCASE acronyms
+        const acronymMatches = text.match(/\b([A-Z]{2,8})\b/g) || [];
+        for (const acro of acronymMatches) {
+            if (acro === 'AI' || acro === 'API' || acro === 'JSON' || acro === 'HTML' || acro === 'CSS') continue;
+            const existing = graph.entities.find(e => e.name === acro);
+            if (existing) { existing.count = (existing.count || 1) + 1; found.add(acro); }
+        }
+        // Extract quoted terms ("something") as concepts
+        const quotedMatches = text.match(/"([^"]{3,60})"/g) || [];
+        for (const q of quotedMatches) {
+            const name = q.replace(/"/g, '').trim();
+            const existing = graph.entities.find(e => e.name === name);
+            if (existing) { existing.count = (existing.count || 1) + 1; found.add(name); }
+        }
+        if (found.size) {
+            StateManager.set('knowledgeGraph', graph);
+            DomLayer.renderKnowledgeGraph(graph);
+        }
     }
 
     async function handleToolCalls(partialText, toolCalls) {
@@ -518,12 +601,14 @@ const App = (() => {
             stopStreaming();
         }
         if (StateManager.isStreaming()) return;
+        StateManager.set('lastFallbackFrom', null);
         DomLayer.updateModelProfile(model);
         if (model.type !== 'chat') { DomLayer.showToast('warning', '[' + model.name + '] is a ' + model.type + ' model. Select a chat model for conversation.'); return; }
         document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
         const match = DomLayer.getModelItem(model.modelId, model.provider);
         if (match) match.classList.add('active');
         const doSwitch = () => {
+            if (model.vision) DomLayer.hideVisionSuggestion();
             StateManager.set('selectedModel', model);
             localStorage.setItem(STORAGE_KEY_ACTIVE_MODEL, JSON.stringify({ provider: model.provider, modelId: model.modelId }));
             StateManager.recompileSystemMessage();
@@ -548,7 +633,7 @@ const App = (() => {
             DomLayer.showInfoInStatus('Switched to [' + model.name + ']');
         };
         const currentModel = StateManager.get('selectedModel');
-        if (currentModel && currentModel.modelId === model.modelId && currentModel.provider === model.provider) { StateManager.recompileSystemMessage(); StateManager.saveConversation(); return; }
+        if (currentModel && currentModel.modelId === model.modelId && currentModel.provider === model.provider) { if (model.vision) DomLayer.hideVisionSuggestion(); StateManager.recompileSystemMessage(); StateManager.saveConversation(); return; }
         if (StateManager.get('conversationHistory').length > 1) {
             showConfirmModal({
                 title: 'Switch Model?',
@@ -593,7 +678,7 @@ const App = (() => {
                         val = val.slice(1, -1);
                     env[m[1]] = val;
                 }
-                const fieldMap = { GROQ_API_KEY:'key-groq', OPENROUTER_API_KEY:'key-openrouter', GOOGLE_API_KEY:'key-google', GEMINI_API_KEY:'key-google', NVIDIA_API_KEY:'key-nvidia' };
+                const fieldMap = { GROQ_API_KEY:'key-groq', OPENROUTER_API_KEY:'key-openrouter' };
                 let count = 0;
                 for (const [ev, id] of Object.entries(fieldMap)) {
                     if (env[ev]) { document.getElementById(id).value = env[ev]; count++; }
@@ -610,7 +695,7 @@ const App = (() => {
     }
 
     function saveKeys() {
-        const keys = { groq: document.getElementById('key-groq').value, openrouter: document.getElementById('key-openrouter').value, google: document.getElementById('key-google').value, nvidia: document.getElementById('key-nvidia').value };
+        const keys = { groq: document.getElementById('key-groq').value, openrouter: document.getElementById('key-openrouter').value };
         localStorage.setItem('war_chest_keys', JSON.stringify(keys));
         DomLayer.toggleVault();
         DomLayer.showToast('success', 'API keys saved to secure local vault.');
@@ -619,7 +704,7 @@ const App = (() => {
 
     function loadKeys() {
         const saved = localStorage.getItem('war_chest_keys');
-        if (saved) { const keys = JSON.parse(saved); document.getElementById('key-groq').value = keys.groq || ''; document.getElementById('key-openrouter').value = keys.openrouter || ''; document.getElementById('key-google').value = keys.google || ''; document.getElementById('key-nvidia').value = keys.nvidia || ''; }
+        if (saved) { const keys = JSON.parse(saved); document.getElementById('key-groq').value = keys.groq || ''; document.getElementById('key-openrouter').value = keys.openrouter || ''; }
     }
 
     function applySystemPrompt() {
@@ -753,29 +838,22 @@ const App = (() => {
                 } catch (_) {}
             })());
         }
-        if (keys.nvidia) {
-            checks.push((async () => {
-                try {
-                    const r = await fetch('https://integrate.api.nvidia.com/v1/models', { headers: { 'Authorization': 'Bearer ' + keys.nvidia } });
-                    const d = await r.json();
-                    const ids = new Set((d.data || []).map(m => m.id));
-                    allModels.filter(m => m.provider === 'nvidia').forEach(m => StateManager.setValidated(m.modelId + ':nvidia', ids.has(m.modelId)));
-                } catch (_) {}
-            })());
-        }
-        if (keys.google) {
-            checks.push((async () => {
-                try {
-                    const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + keys.google);
-                    const d = await r.json();
-                    const ids = new Set((d.models || []).map(m => m.name.replace('models/', '')));
-                    allModels.filter(m => m.provider === 'google').forEach(m => StateManager.setValidated(m.modelId + ':google', ids.has(m.modelId)));
-                } catch (_) {}
-            })());
-        }
 
         await Promise.allSettled(checks);
         DomLayer.renderModelList();
+    }
+
+    function clearChat() {
+        if (StateManager.isStreaming()) return;
+        if (StateManager.get('pendingAttachment')) App.removeAttachment();
+        document.getElementById('terminal-input').value = '';
+        document.getElementById('terminal-input').style.height = 'auto';
+        try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (_) {}
+        DomLayer.showToast('info', 'Starting new session...');
+        StateManager.endSession();
+        document.querySelectorAll('#terminal-output > *').forEach(el => el.remove());
+        DomLayer.renderSessionTimeline();
+        DomLayer.showInfoInStatus('Chat cleared');
     }
 
     function handleKeyDown(e) {
@@ -798,6 +876,8 @@ const App = (() => {
         ta.style.height = nh + 'px';
         document.getElementById('chat-input-area').classList.toggle('input-expanded', nh > 40);
         try { sessionStorage.setItem(STORAGE_KEY_DRAFT, ta.value); } catch (e) { }
+        const chars = document.getElementById('input-chars');
+        if (chars) chars.textContent = ta.value.length + ' characters';
     }
 
     function handlePaste(e) {
@@ -806,6 +886,8 @@ const App = (() => {
         for (const item of items) {
             if (item.type.startsWith('image/')) {
                 const file = item.getAsFile();
+                if (!file) break;
+                if (file.size > 20 * 1024 * 1024) { DomLayer.showToast('error', 'Pasted image exceeds 20MB limit.'); break; }
                 if (file) { handleAttachment(file); break; }
             }
         }
@@ -813,8 +895,8 @@ const App = (() => {
 
     function handleAttachment(file) {
         if (!file) { App.removeAttachment(); return; }
-        if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) { DomLayer.showToast('error', 'Unsupported file type: ' + file.type + '. Please upload JPG, PNG, GIF, or WebP images only.'); return; }
-        if (file.size > 5 * 1024 * 1024) { DomLayer.showToast('error', 'Image exceeds 5MB limit.'); return; }
+        if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml', 'image/avif'].includes(file.type)) { DomLayer.showToast('error', 'Unsupported file type: ' + file.type + '. Please upload JPG, PNG, GIF, WebP, SVG, or AVIF images only.'); return; }
+        if (file.size > 20 * 1024 * 1024) { DomLayer.showToast('error', 'Image exceeds 20MB limit.'); return; }
         const img = new Image();
         img.onload = () => {
             const dimensions = { w: img.naturalWidth, h: img.naturalHeight };
@@ -823,19 +905,38 @@ const App = (() => {
             state.dataUrl = img.src;
             StateManager.set('pendingAttachment', state);
             DomLayer.showAttachmentPreview(state.fileName, state.dataUrl, file.size, dimensions);
+            checkVisionForAttachment();
             playSound('select');
         };
+        img.onerror = () => { DomLayer.showToast('error', 'Failed to load image. The file may be corrupted.'); };
         const reader = new FileReader();
-        reader.onload = (ev) => {
-            img.src = ev.target.result;
-        };
+        reader.onload = (ev) => { img.src = ev.target.result; };
+        reader.onerror = () => { DomLayer.showToast('error', 'Failed to read file.'); };
         reader.readAsDataURL(file);
     }
 
-    function removeAttachment() { StateManager.set('pendingAttachment', null); DomLayer.removeAttachmentPreview(); playSound('click'); }
+    function removeAttachment() { StateManager.set('pendingAttachment', null); DomLayer.removeAttachmentPreview(); DomLayer.hideVisionSuggestion(); playSound('click'); }
+
+    function checkVisionForAttachment() {
+        const model = StateManager.get('selectedModel');
+        if (!model || model.vision) return;
+        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        const visionModel = [...models, ...StateManager.get('customModels')].find(m => m.vision && m.type === 'chat' && keys[m.provider]);
+        if (visionModel) DomLayer.showVisionSuggestion(visionModel);
+    }
+
+    function switchToVisionModel(model) {
+        DomLayer.hideVisionSuggestion();
+        if (model) selectModel(model);
+    }
 
     function loadConversation() {
         StateManager.loadSessionData();
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY_REFDOC);
+            if (saved) { const parsed = JSON.parse(saved); if (parsed && parsed.content) StateManager.set('refDoc', parsed); }
+        } catch (e) {}
+        DomLayer.updateDocUI();
         const allModels = [...models, ...StateManager.get('customModels')];
         const activeRaw = localStorage.getItem(STORAGE_KEY_ACTIVE_MODEL);
         if (activeRaw) {
@@ -848,6 +949,7 @@ const App = (() => {
         }
         StateManager.recompileSystemMessage();
         DomLayer.renderConversation();
+        DomLayer.renderSessionTimeline();
         DomLayer.updateTerminalStatus('standby');
     }
 
@@ -919,6 +1021,93 @@ const App = (() => {
         document.getElementById('vault-close-btn').addEventListener('click', toggleVault);
         document.getElementById('wipe-btn')?.addEventListener('click', wipeSystem);
         document.getElementById('remove-attach-btn')?.addEventListener('click', removeAttachment);
+        setupRefDocEvents();
+    }
+
+    function setupRefDocEvents() {
+        const dropZone = document.getElementById('doc-drop-zone');
+        const fileInput = document.getElementById('doc-file-input');
+        const removeBtn = document.getElementById('doc-remove-btn');
+        if (!dropZone) return;
+
+        dropZone.addEventListener('click', (e) => {
+            if (e.target.closest('#doc-remove-btn') || e.target.closest('#doc-loaded-state')) return;
+            if (StateManager.get('refDoc')) return;
+            fileInput?.click();
+        });
+
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                handleRefDocFile(file);
+                fileInput.value = '';
+            });
+        }
+
+        if (removeBtn) {
+            removeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleRefDocRemove();
+            });
+        }
+
+        dropZone.addEventListener('dragenter', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); const overlay = document.getElementById('doc-drop-overlay'); if (overlay) overlay.classList.remove('hidden'); });
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+        dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); const overlay = document.getElementById('doc-drop-overlay'); if (overlay) overlay.classList.add('hidden'); });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over');
+            const overlay = document.getElementById('doc-drop-overlay');
+            if (overlay) overlay.classList.add('hidden');
+            const files = e.dataTransfer.files;
+            if (!files?.length) return;
+            const file = files[0];
+            if (!file.name.endsWith('.md') && !file.name.endsWith('.txt')) {
+                DomLayer.showToast('error', 'Unsupported file type. Please upload .md or .txt files only.');
+                return;
+            }
+            handleRefDocFile(file);
+        });
+
+        dropZone.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (StateManager.get('refDoc')) return;
+                fileInput?.click();
+            }
+        });
+    }
+
+    function handleRefDocFile(file) {
+        if (file.size > 5 * 1024 * 1024) {
+            DomLayer.showToast('error', 'Reference document exceeds 5MB limit.');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const refDoc = { name: file.name, size: file.size, content: ev.target.result };
+            StateManager.set('refDoc', refDoc);
+            try { localStorage.setItem(STORAGE_KEY_REFDOC, JSON.stringify(refDoc)); } catch (e) {}
+            DomLayer.updateDocUI();
+            StateManager.recompileSystemMessage();
+            StateManager.saveConversation();
+            playSound('select');
+            DomLayer.showToast('success', 'Reference document loaded: ' + file.name);
+        };
+        reader.onerror = () => DomLayer.showToast('error', 'Failed to read file.');
+        reader.readAsText(file);
+    }
+
+    function handleRefDocRemove() {
+        const refDoc = StateManager.get('refDoc');
+        if (!refDoc) return;
+        StateManager.set('refDoc', null);
+        try { localStorage.removeItem(STORAGE_KEY_REFDOC); } catch (e) {}
+        DomLayer.updateDocUI();
+        StateManager.recompileSystemMessage();
+        StateManager.saveConversation();
+        playSound('click');
+        DomLayer.showToast('info', 'Reference document removed.');
     }
 
     function setupAudioEvents() {
@@ -971,6 +1160,8 @@ const App = (() => {
             const fab = document.getElementById('scroll-bottom-btn');
             if (fab) fab.classList.toggle('visible', !isAtBottom);
         });
+        const fabBtn = document.getElementById('scroll-bottom-btn');
+        if (fabBtn) fabBtn.addEventListener('click', () => DomLayer.scrollToBottom());
     }
 
     function setupVaultEvents() {
@@ -1000,6 +1191,19 @@ const App = (() => {
     }
 
     function setupGlobalEvents() {
+        window.addEventListener('offline', () => {
+            const banner = document.getElementById('offline-banner');
+            if (banner) banner.classList.remove('hidden');
+        });
+        window.addEventListener('online', () => {
+            const banner = document.getElementById('offline-banner');
+            if (banner) banner.classList.add('hidden');
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && StateManager.isStreaming()) {
+                StateManager.saveConversationNow();
+            }
+        });
         document.addEventListener('scroll-to-bottom', () => DomLayer.scrollToBottom());
         document.addEventListener('scroll-fab', () => DomLayer.scrollToBottom());
         window.addEventListener('beforeunload', (e) => {
@@ -1009,6 +1213,7 @@ const App = (() => {
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); return; }
+                if (window.speechSynthesis && window.speechSynthesis.speaking) { DomLayer.stopSpeaking(); return; }
                 if (StateManager.isStreaming()) { stopStreaming(); return; }
                 const vault = document.getElementById('vault-modal');
                 if (vault && !vault.classList.contains('hidden')) { toggleVault(); return; }
@@ -1042,6 +1247,14 @@ const App = (() => {
         const importInput = document.getElementById('import-history-input');
         document.getElementById('import-history-btn').addEventListener('click', () => importInput.click());
         importInput.addEventListener('change', (e) => DomLayer.importHistoryJSON(e.target.files[0]));
+        document.getElementById('clear-chat-btn').addEventListener('click', clearChat);
+        document.getElementById('switch-vision-btn').addEventListener('click', () => {
+            const btn = document.getElementById('switch-vision-btn');
+            const provider = btn.dataset.switchProvider;
+            const modelId = btn.dataset.switchModelId;
+            const model = [...models, ...StateManager.get('customModels')].find(m => m.provider === provider && m.modelId === modelId);
+            if (model) switchToVisionModel(model);
+        });
     }
 
     function setupToolbarEvents() {
@@ -1088,6 +1301,12 @@ const App = (() => {
             }
         }
 
+        const exportBtn = document.getElementById('export-btn');
+        if (exportBtn) exportBtn.addEventListener('click', () => DomLayer.exportChat());
+
+        const stopSpeakBtn = document.getElementById('stop-speak-btn');
+        if (stopSpeakBtn) stopSpeakBtn.addEventListener('click', () => DomLayer.stopSpeaking());
+
         const deltaBtn = document.getElementById('delta-toggle-btn');
         if (deltaBtn) deltaBtn.addEventListener('click', toggleDeltaMode);
     }
@@ -1103,14 +1322,18 @@ const App = (() => {
         function setupDragEvents() {
             const area = document.getElementById('chat-input-area');
             if (!area) return;
-            const input = document.getElementById('file-input');
-            area.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); area.classList.add('drag-over'); });
+            area.addEventListener('dragenter', (e) => { e.preventDefault(); e.stopPropagation(); area.classList.add('drag-over'); });
+            area.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
             area.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); area.classList.remove('drag-over'); });
             area.addEventListener('drop', (e) => {
                 e.preventDefault(); e.stopPropagation(); area.classList.remove('drag-over');
                 const files = e.dataTransfer.files;
                 if (!files || !files.length) return;
-                for (const f of files) { if (f.type.startsWith('image/')) { handleAttachment(f); break; } }
+                let handled = false;
+                for (const f of files) {
+                    if (f.type.startsWith('image/')) { handleAttachment(f); handled = true; break; }
+                }
+                if (!handled) DomLayer.showToast('warning', 'Only image files (JPG, PNG, GIF, WebP, SVG, AVIF) are supported.');
             });
         }
 
@@ -1145,6 +1368,7 @@ const App = (() => {
         StateManager.subscribe('conversationHistory', () => {
             DomLayer.updateContextMeter();
             DomLayer.updateSessionStats();
+            DomLayer.renderSessionTimeline();
         });
         StateManager.subscribe('isStreaming', (streaming) => {
             DomLayer.updateSendStopButtons(streaming);

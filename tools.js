@@ -34,7 +34,10 @@ const ToolExecutor = (() => {
         if (!query) return { error: 'No search query provided' };
         try {
             const url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(query) + '&format=json&no_html=1';
-            const res = await fetch(url);
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 10000);
+            const res = await fetch(url, { signal: ctrl.signal });
+            clearTimeout(timer);
             if (!res.ok) return { error: 'Search failed: HTTP ' + res.status };
             const data = await res.json();
             const result = { query, source: 'DuckDuckGo' };
