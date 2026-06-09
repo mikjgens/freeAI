@@ -8,10 +8,10 @@ Multi-model LLM chat interface with **ambient intelligence**. No build step, no 
 
 ## Features
 
-- **27 models** across Groq and OpenRouter (free tier)
+- **28 models** across Groq and OpenRouter (free tier)
 - **Streaming responses** with typewriter cursor and markdown rendering
 - **TF-IDF RAG** — sentence-aware chunking on reference documents (drag-drop or click to upload)
-- **Pixel-art avatar** — 32x32 sprite engine with blink/mouth animation
+- **Pixel-art avatar** — 16×16 procedural sprite engine with 5-state expression machine, breathing, blink, pupil tracking, error flash
 - **Audio cues** — Web Audio API chiptune oscillator (pentatonic arpeggio per response)
 - **Vision support** — image attachments with auto-suggest to switch to a vision-capable model
 - **Function calling** — local tools (time, math, web search, UI state)
@@ -36,7 +36,7 @@ Multi-model LLM chat interface with **ambient intelligence**. No build step, no 
 | Provider | Models | Auth |
 |----------|--------|------|
 | Groq | 8 | API key |
-| OpenRouter | 19 | API key (free tier) |
+| OpenRouter | 20 | API key (free tier) |
 
 ## Getting Started
 
@@ -84,11 +84,11 @@ Built-in protections for the free-tier constraints of Groq and OpenRouter:
 
 ```
 index.html       — HTML + CSS + entry point
-models.js        — Fleet data (27 models) and constants
+models.js        — Fleet data (28 models) and constants
 rag.js           — TF-IDF chunking (sentence-aware), indexing, retrieval
 icons.js         — Inline SVG icon definitions
 sound.js         — Web Audio API chiptune oscillator
-avatar.js        — Pixel-art sprite engine (32x32)
+avatar.js        — Procedural pixel-art sprite engine (16×16, 5-state expression machine), breathing, blink, pupil tracking
 utils.js         — Utilities (debounce, token estimation, safeEval, etc.)
 state.js         — Centralized state with pub/sub, streaming counter, token cache,
                    session schema v2, knowledge graph store
@@ -142,7 +142,7 @@ v1 flat arrays auto-migrate on first load. The session timeline in the left side
 | State Key | DOM Reaction |
 |-----------|-------------|
 | `selectedModel` | Update active model bar, context meter, model profile, terminal status |
-| `conversationHistory` | Update context meter, session stats |
+| `conversationhistory` | Update context meter, session stats |
 | `isStreaming` | Show/hide Send/Stop buttons |
 
 No manual `DomLayer.updateX()` calls scattered through business logic. Adding a new feature with UI reactions is one `subscribe()` call away.

@@ -89,7 +89,7 @@ const App = (() => {
         StateManager.pushMessage({ _id: userMsgId, role: 'user', content: userContent });
         StateManager.incrementStreaming();
         DomLayer.updateTerminalStatus('info', 'Processing...');
-        AvatarEngine.startSpeaking();
+        AvatarEngine.setExpression('thinking');
         playSound('start');
         StateManager.set('toolLoopIteration', 0);
         StateManager.set('lastToolCallSig', null);
@@ -140,7 +140,7 @@ const App = (() => {
 
         StateManager.incrementStreaming();
         DomLayer.updateTerminalStatus('info', 'Delta: ' + modelsToCall.length + ' models (staggered)...');
-        AvatarEngine.startSpeaking();
+        AvatarEngine.setExpression('thinking');
         playSound('start');
 
         // Clean payload: system prompt + current message only — no history
@@ -246,7 +246,7 @@ const App = (() => {
         btn.classList.add('listening');
         const quip = _voiceQuips[Math.floor(Math.random() * _voiceQuips.length)];
         DomLayer.updateTerminalStatus('info', quip);
-        AvatarEngine.startSpeaking();
+        AvatarEngine.setExpression('listening');
         playSound('select');
         reco.onresult = (e) => {
             const transcript = e.results[0][0].transcript;
@@ -342,6 +342,7 @@ const App = (() => {
                 if (!streamState.attachmentCleared) { streamState.attachmentCleared = true; App.removeAttachment(); }
                 if (!streamState.tokensReceived) {
                     DomLayer.updateTerminalStatus('streaming');
+                    AvatarEngine.setExpression('speaking');
                     if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
                 }
                 streamState.fullText += token;
@@ -359,6 +360,7 @@ const App = (() => {
                 finalizeResponse(streamState, finalText, null, false);
             },
             onError: (errMsg) => {
+                AvatarEngine.flashError();
                 AvatarEngine.stopSpeaking();
                 DomLayer.stopSpeaking();
                 StateManager.decrementStreaming();
@@ -1031,6 +1033,9 @@ const App = (() => {
         document.getElementById('terminal-input').addEventListener('paste', handlePaste);
         document.getElementById('attach-btn').addEventListener('click', () => document.getElementById('file-input').click());
         document.getElementById('file-input').addEventListener('change', (e) => handleAttachment(e.target.files[0]));
+        const ti = document.getElementById('terminal-input');
+        ti.addEventListener('focus', () => { if (!StateManager.isStreaming()) AvatarEngine.setExpression('listening'); });
+        ti.addEventListener('blur',  () => { if (!StateManager.isStreaming()) AvatarEngine.setExpression('idle'); });
     }
 
     function setupModelFilterEvents() {
