@@ -2,4 +2,10 @@
 .env
 .playwright-mcp/
 test-result-snapshot
+.vscode/
+.idea/
+*.log
+*.key
+*.pem
+node_modules/
 
