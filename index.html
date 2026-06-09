@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="dark">
-    <title>War Chest Command Center v2.6</title>
+    <title>War Chest Command Center v2.7</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/fontsource-jetbrains-mono@5.0.0/index.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -88,7 +88,19 @@
         #terminal-input { transition: height 0.25s ease-out; }
         #chat-input-area { transition: all 0.25s ease-out; }
         #chat-input-area.input-expanded { border-top-color: rgba(0,255,65,0.25); box-shadow: 0 -4px 24px rgba(0,255,65,0.06); }
-        @media (prefers-reduced-motion: reduce) { .crt-flicker { animation: none; } .scanlines { opacity: 0.15; } .blink { animation: none; opacity: 1; } .animate-pulse { animation: none; } .model-item, .filter-btn, .tag-pill, .offline-banner, #doc-drop-zone, .toast, #terminal-input, #chat-input-area { transition: none; } #scroll-bottom-btn { transition: none; } .msg-action { opacity: 1; } }
+        .toolbar-btn { padding: 1px 7px; font-size: 11px; background: rgba(30,30,30,0.4); border: 1px solid rgba(255,255,255,0.06); border-radius: 4px; color: #555; transition: all 0.15s ease; cursor: pointer; line-height: 1.6; }
+        .toolbar-btn:hover { background: rgba(0,255,65,0.08); border-color: rgba(0,255,65,0.25); color: #00ff41; }
+        .toolbar-btn.active { color: #00ff41; border-color: rgba(0,255,65,0.3); background: rgba(0,255,65,0.08); }
+        .toolbar-btn.listening { color: #00ff41; border-color: rgba(0,255,65,0.6); background: rgba(0,255,65,0.12); animation: pulse-glow 1s ease-in-out infinite; }
+        @keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 4px rgba(0,255,65,0.2); } 50% { box-shadow: 0 0 12px rgba(0,255,65,0.5); } }
+        .toolbar-indicator { font-size: 10px; color: #555; padding: 1px 6px; border-radius: 3px; background: rgba(30,30,30,0.4); border: 1px solid rgba(255,255,255,0.06); letter-spacing: 0.5px; transition: all 0.3s ease; }
+        .toolbar-indicator.active { color: #00ff41; border-color: rgba(0,255,65,0.3); background: rgba(0,255,65,0.08); }
+
+        .speaker-btn { opacity: 0; transition: opacity 0.15s ease; font-size: 12px; cursor: pointer; color: #555; background: none; border: none; padding: 0 4px; }
+        .speaker-btn:hover { color: #00ff41; }
+        .speaker-btn.speaking { color: #00ff41; animation: pulse-glow 0.8s ease-in-out infinite; }
+        .msg-container:hover .speaker-btn { opacity: 1; }
+        @media (prefers-reduced-motion: reduce) { .crt-flicker { animation: none; } .scanlines { opacity: 0.15; } .blink { animation: none; opacity: 1; } .animate-pulse { animation: none; } .model-item, .filter-btn, .tag-pill, .offline-banner, #doc-drop-zone, .toast, #terminal-input, #chat-input-area { transition: none; } #scroll-bottom-btn { transition: none; } .msg-action { opacity: 1; } .toolbar-btn.listening { animation: none; } .speaker-btn.speaking { animation: none; } }
     </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden selection:bg-green-500/30 selection:text-green-200 crt-flicker">
@@ -98,7 +110,7 @@
     <header class="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-black/60 backdrop-blur-md z-10">
         <div class="flex items-center gap-4">
             <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.8)]"></div>
-            <h1 class="text-xl font-bold tracking-widest text-white">COMMAND CENTER <span class="text-green-500 glow-text">v2.6</span></h1>
+            <h1 class="text-xl font-bold tracking-widest text-white">COMMAND CENTER <span class="text-green-500 glow-text">v2.7</span></h1>
             <span class="px-2 py-0.5 text-[10px] font-bold border border-green-500/30 text-green-400 rounded bg-green-500/5 tracking-wider">WAR CHEST A.I.</span>
             <span class="px-2 py-0.5 text-[10px] font-bold border border-blue-500/30 text-blue-400 rounded bg-blue-500/5 tracking-wider">MULTI-MODEL DEPLOYMENT</span>
             <div class="hidden md:flex items-center gap-1 h-4 ml-4" id="token-flow"></div>
@@ -111,6 +123,7 @@
                 </div>
                 <span id="context-meter-pct" class="text-[10px] text-gray-500 font-mono min-w-[28px] text-right"></span>
             </div>
+            <button id="tts-toggle-btn" class="px-2 py-2 text-xs bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700/50 rounded transition-all hover:border-green-400/50 hidden" title="Auto-speak responses" aria-label="Toggle auto-speak">🗣️</button>
             <button id="audio-toggle-btn" class="px-3 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-green-500/50 rounded transition-all hover:border-green-400" title="Mute sounds" aria-label="Toggle audio on or off">🔊</button>
         </div>
     </header>
@@ -135,7 +148,14 @@
                     <div id="doc-drop-zone" class="flex-1 min-h-0 relative border-2 border-dashed border-gray-700 rounded-lg p-3 text-center cursor-pointer transition-all hover:border-green-500/30 text-gray-500 text-xs font-mono">
                         <div id="doc-empty-state"><div class="text-lg mb-1">📁</div><div>Drop a .md or .txt file here</div><div class="text-[9px] text-gray-600 mt-1">or click to browse</div></div>
                         <div id="doc-drop-overlay" class="hidden absolute inset-0 bg-green-900/20 border-2 border-green-500/50 rounded-lg items-center justify-center text-green-400 font-bold z-10">📄 Drop to attach</div>
-                        <div id="doc-loaded-state" class="hidden flex items-center gap-2 text-left"><span class="text-lg">📄</span><span id="doc-filename" class="text-green-400 font-bold flex-1 truncate"></span><span id="doc-filesize" class="text-[10px] text-gray-500"></span><button id="doc-remove-btn" class="text-red-400 hover:text-red-300 text-lg leading-none px-1">&times;</button></div>
+                        <div id="doc-loaded-state" class="hidden flex items-center gap-2 text-left"><span class="text-lg">📄</span><span id="doc-filename" class="text-green-400 font-bold flex-1 truncate"></span><span id="doc-filesize" class="text-[10px] text-gray-500"></span><span id="doc-chunks" class="text-[9px] text-gray-600 ml-1"></span><button id="doc-remove-btn" class="text-red-400 hover:text-red-300 text-lg leading-none px-1">&times;</button></div>
+                    </div>
+                    <div id="rag-controls" class="hidden flex items-center gap-2 mt-1.5 text-[10px]">
+                        <label class="flex items-center gap-1.5 cursor-pointer text-gray-500 hover:text-gray-300 transition-colors">
+                            <input type="checkbox" id="rag-toggle" class="accent-green-500 w-3 h-3" checked>
+                            RAG
+                        </label>
+                        <span id="rag-chunk-count" class="text-gray-600"></span>
                     </div>
                     <input type="file" id="doc-file-input" accept=".md,.txt" class="hidden">
                 </div>
@@ -167,6 +187,13 @@
                     <textarea id="terminal-input" placeholder="Enter command or message..." class="flex-1 bg-black/60 border border-gray-700 rounded px-4 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all placeholder-gray-600 font-mono resize-none overflow-y-auto" rows="1" aria-label="Message input"></textarea>
                     <button id="send-btn" class="px-5 py-2.5 rounded bg-green-600 hover:bg-green-500 text-black font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(22,163,74,0.3)] hover:shadow-[0_0_20px_rgba(22,163,74,0.5)]" aria-label="Send message">SEND ❯</button>
                     <button id="stop-btn" class="hidden px-4 py-2.5 rounded bg-red-700 hover:bg-red-600 text-white font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(220,38,38,0.3)]" aria-label="Stop streaming">⏹ STOP</button>
+                </div>
+                <div class="flex items-center gap-1.5 mt-1.5 toolbar-row">
+                    <button id="voice-btn" class="toolbar-btn" title="Voice input" aria-label="Voice input">🎤</button>
+                    <span class="w-px h-3 bg-gray-700/50"></span>
+                    <span id="rag-indicator" class="toolbar-indicator hidden">📄 RAG</span>
+                    <div class="flex-1"></div>
+                    <button id="export-btn" class="toolbar-btn" title="Export conversation as markdown" aria-label="Export chat">⎆</button>
                 </div>
                 <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden">
                 <div class="flex justify-between items-center mt-1.5">
@@ -377,7 +404,6 @@ const models = [
     { provider: 'nvidia', color: '🟣', name: 'Kimi K2.6 (NIM)', desc: '256K ctx', ctx: '256K', tools: 'Function Calling', modelId: 'moonshotai/kimi-k2.6', type: 'chat', tags: ['long-context', 'agentic'], weakness: 'ecosystem less mature in English' },
     { provider: 'nvidia', color: '🟣', name: 'Nemotron-3 Super (NIM)', desc: 'Agentic, multi-agent RL', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nemotron-3-super-120b-a12b', type: 'chat', tags: ['agentic', 'multi-agent', 'rl'], weakness: 'large, may be slow' },
     { provider: 'nvidia', color: '🟣', name: 'Nemotron Nano Omni (NIM)', desc: 'Reasoning', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nvidia-nemotron-nano-9b-v2', type: 'chat', tags: ['reasoning', 'nano', 'efficient'], weakness: '9B — limited depth vs larger models' },
-    { provider: 'nvidia', color: '🟣', name: 'Nemotron Super 49B', desc: 'IS free', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nemotron-nano-3-30b-a3b', type: 'chat', tags: ['free', 'mid-size', 'balanced'], weakness: 'modelId may differ from naming' },
     { provider: 'nvidia', color: '🟣', name: 'Qwen3.5 122B', desc: 'New gen', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3.5-122b-a10b', type: 'chat', tags: ['new-gen', 'large', 'moe'], weakness: 'newly released — less battle-tested' },
     { provider: 'nvidia', color: '🟣', name: 'Qwen3.5 397B', desc: 'Massive MoE', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3.5-397b-a17b', type: 'chat', tags: ['massive', 'moe', 'frontier'], weakness: 'very large — high latency, may hit rate limits' },
     { provider: 'nvidia', color: '🟣', name: 'Qwen3 Next 80B', desc: 'Fast', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3-next-80b-a3b-instruct', type: 'chat', tags: ['fast', 'moe', 'efficient'], weakness: 'less capable than full-size Qwen models' },
@@ -530,6 +556,48 @@ function findModelItem(modelId, provider) {
     return null;
 }
 // ============================================================
+// 5b. RAG UTILITIES — TF-IDF document chunking & retrieval
+// ============================================================
+function chunkDocument(text) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const chunks = [];
+    const chunkSize = 200;
+    for (let i = 0; i < words.length; i += chunkSize) {
+        chunks.push({ index: chunks.length, text: words.slice(i, i + chunkSize).join(' ') });
+    }
+    return chunks;
+}
+function buildRagIndex(chunks) {
+    const index = {};
+    for (const chunk of chunks) {
+        const words = chunk.text.toLowerCase().split(/\W+/).filter(Boolean);
+        for (const word of words) {
+            if (!index[word]) index[word] = {};
+            if (!index[word][chunk.index]) index[word][chunk.index] = 0;
+            index[word][chunk.index]++;
+        }
+    }
+    return index;
+}
+function retrieveChunks(query, chunks, index) {
+    const qWords = query.toLowerCase().split(/\W+/).filter(w => w.length > 2);
+    if (!qWords.length || !chunks.length) return [];
+    const N = chunks.length;
+    const scores = chunks.map(() => 0);
+    for (const qw of qWords) {
+        if (!index[qw]) continue;
+        const df = Object.keys(index[qw]).length;
+        const idf = Math.log(1 + (N - df + 0.5) / (df + 0.5));
+        for (const ci in index[qw]) {
+            const tf = 1 + Math.log(1 + index[qw][ci]);
+            scores[parseInt(ci)] += tf * idf;
+        }
+    }
+    const indexed = chunks.map((c, i) => ({ index: i, score: scores[i] })).filter(x => x.score > 0);
+    indexed.sort((a, b) => b.score - a.score);
+    return indexed.slice(0, 3).map(x => chunks[x.index]);
+}
+// ============================================================
 // 6. STATE MANAGER — centralized store with lightweight pub/sub
 // ============================================================
 const StateManager = (() => {
@@ -539,6 +607,9 @@ const StateManager = (() => {
         customModels: [], currentFilter: 'all', capabilityFilters: [], userPrompt: null, refDoc: null,
         userScrolledAway: false, toolLoopIteration: 0, lastToolCallSig: null, lastToolCallRepeat: 0,
         audioMuted: JSON.parse(localStorage.getItem('war_chest_audio_muted') || 'false'),
+        ragEnabled: JSON.parse(localStorage.getItem('war_chest_rag_enabled') || 'true'),
+        ttsEnabled: JSON.parse(localStorage.getItem('war_chest_tts_enabled') || 'false'),
+        ragChunks: [],
     };
     const _listeners = {};
 
@@ -575,7 +646,7 @@ const StateManager = (() => {
             selectedModel: null, conversationHistory: [{ role: 'system', content: '' }], isStreaming: false,
             abortController: null, pendingAttachment: null, validatedModels: {}, customModels: [],
             currentFilter: 'all', userPrompt: null, refDoc: null, userScrolledAway: false,
-            audioMuted: false,
+            audioMuted: false, ragEnabled: true, ttsEnabled: false, ragChunks: [],
         });
         (_listeners['*'] || []).forEach(fn => fn(_state));
     }
@@ -810,14 +881,23 @@ const DomLayer = (() => {
         ts.className = 'msg-timestamp text-gray-600';
         ts.textContent = formatTimestamp(new Date());
         div.appendChild(ts);
+        const speakerBtn = document.createElement('button');
+        speakerBtn.className = 'speaker-btn msg-action absolute top-0 right-[5.5rem] text-[11px] px-1 py-0.5';
+        speakerBtn.textContent = '\uD83D\uDD0A';
+        speakerBtn.title = 'Read aloud';
+        speakerBtn.onclick = () => {
+            const t = div.querySelector('.markdown-body').textContent;
+            if (t) DomLayer.speakResponse(t);
+        };
+        div.appendChild(speakerBtn);
         const copyBtn = document.createElement('button');
-        copyBtn.className = 'msg-action absolute top-0 right-6 text-[11px] text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
+        copyBtn.className = 'msg-action absolute top-0 right-[4.25rem] text-[11px] text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
         copyBtn.textContent = '\u29C9';
         copyBtn.title = 'Copy response';
         copyBtn.onclick = () => { const t = div.querySelector('.markdown-body').textContent; navigator.clipboard.writeText(t).catch(() => {}); copyBtn.textContent = '\u2713'; copyBtn.classList.add('text-green-400'); setTimeout(() => { copyBtn.textContent = '\u29C9'; copyBtn.classList.remove('text-green-400'); }, 1500); };
         div.appendChild(copyBtn);
         const regenBtn = document.createElement('button');
-        regenBtn.className = 'msg-action absolute top-0 right-12 text-[11px] text-gray-600 hover:text-cyan-400 px-1 py-0.5 rounded';
+        regenBtn.className = 'msg-action absolute top-0 right-[2.75rem] text-[11px] text-gray-600 hover:text-cyan-400 px-1 py-0.5 rounded';
         regenBtn.textContent = '\u21BB';
         regenBtn.title = 'Regenerate response';
         regenBtn.onclick = () => { if (!StateManager.get('isStreaming')) App.regenerateResponse(div); };
@@ -934,7 +1014,9 @@ const DomLayer = (() => {
         if (!container) return;
         container.innerHTML = '';
         for (const img of images) {
-            const src = 'data:' + img.mime + ';base64,' + img.data;
+            const src = img.data.startsWith('data:') || img.data.startsWith('http')
+                ? img.data
+                : 'data:' + (img.mime || 'image/png') + ';base64,' + img.data;
             const wrapper = document.createElement('div');
             wrapper.className = 'relative group inline-block cursor-pointer';
             const thumb = document.createElement('img');
@@ -1072,13 +1154,35 @@ const DomLayer = (() => {
         const refDoc = StateManager.get('refDoc');
         const emptyState = document.getElementById('doc-empty-state');
         const loadedState = document.getElementById('doc-loaded-state');
+        const ragControls = document.getElementById('rag-controls');
         if (!emptyState || !loadedState) return;
         if (refDoc) {
             emptyState.classList.add('hidden');
             loadedState.classList.remove('hidden');
             document.getElementById('doc-filename').textContent = refDoc.name;
             document.getElementById('doc-filesize').textContent = (refDoc.size / 1024).toFixed(0) + 'KB';
-        } else { emptyState.classList.remove('hidden'); loadedState.classList.add('hidden'); }
+            const chunks = chunkDocument(refDoc.content);
+            StateManager.set('ragChunks', chunks);
+            const idx = buildRagIndex(chunks);
+            StateManager._ragIndex = idx;
+            const chunkEl = document.getElementById('doc-chunks');
+            if (chunkEl) chunkEl.textContent = chunks.length + ' chunks';
+            if (ragControls) {
+                ragControls.classList.remove('hidden');
+                const cb = document.getElementById('rag-toggle');
+                if (cb) cb.checked = StateManager.get('ragEnabled');
+                const cc = document.getElementById('rag-chunk-count');
+                if (cc) cc.textContent = chunks.length + ' chunks indexed';
+            }
+            updateRagIndicator(false);
+        } else {
+            emptyState.classList.remove('hidden');
+            loadedState.classList.add('hidden');
+            StateManager.set('ragChunks', []);
+            StateManager._ragIndex = null;
+            if (ragControls) ragControls.classList.add('hidden');
+            updateRagIndicator(false);
+        }
     }
 
     function updateSessionStats() {
@@ -1111,6 +1215,67 @@ const DomLayer = (() => {
             + elapsed.toFixed(1) + 's</span>';
     }
 
+    function exportChat() {
+        const history = StateManager.get('conversationHistory');
+        if (history.length <= 1) { showToast('warning', 'Nothing to export yet.'); return; }
+        let md = '# War Chest Command Center — Conversation Export\n\n';
+        for (const msg of history) {
+            if (msg.role === 'system') continue;
+            if (typeof msg.content === 'string') {
+                const role = msg.role === 'user' ? '**You**' : '**AI**';
+                md += `### ${role}\n${msg.content}\n\n`;
+            } else if (Array.isArray(msg.content)) {
+                md += '### **You**\n';
+                for (const p of msg.content) {
+                    if (p.type === 'text') md += `${p.text}\n`;
+                    if (p.type === 'image_url') md += `_[Image attached]_\n`;
+                }
+                md += '\n';
+            }
+        }
+        try {
+            const blob = new Blob([md], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `war-chest-${new Date().toISOString().slice(0, 10)}.md`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('success', 'Conversation exported as .md');
+        } catch (e) {
+            showToast('error', 'Export failed: ' + e.message);
+        }
+    }
+
+    function updateRagIndicator(active) {
+        const el = document.getElementById('rag-indicator');
+        if (!el) return;
+        const hasDoc = StateManager.get('refDoc');
+        if (!hasDoc) { el.classList.add('hidden'); return; }
+        el.classList.remove('hidden');
+        el.classList.toggle('active', active);
+    }
+
+    function speakResponse(text, onEnd) {
+        if (!window.speechSynthesis) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 0.8;
+        utterance.onstart = () => AvatarEngine.startSpeaking();
+        utterance.onend = () => { AvatarEngine.stopSpeaking(); if (onEnd) onEnd(); };
+        utterance.onerror = () => { AvatarEngine.stopSpeaking(); if (onEnd) onEnd(); };
+        speechSynthesis.speak(utterance);
+    }
+
+    function stopSpeaking() {
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        AvatarEngine.stopSpeaking();
+    }
+
     return {
         updateTerminalStatus, showInfoInStatus, updateSendStopButtons, updateContextMeter,
         updateActiveModelBar, showToast, renderModelList, updateModelProfile,
@@ -1119,7 +1284,7 @@ const DomLayer = (() => {
         archiveMessages, addHorizonBanner, displayImages, showImageLightbox, downloadImage,
         updatePromptCharCount, updateDocUI, updateSessionStats, scrollToBottom, toggleVault,
         renderConversation, showAttachmentPreview, removeAttachmentPreview, syncFleetSelection,
-        updateTokenFlow,
+        updateTokenFlow, exportChat, updateRagIndicator, speakResponse, stopSpeaking,
     };
 })();
 // ============================================================
@@ -1465,6 +1630,20 @@ const App = (() => {
         if (selectedModel.type !== 'chat') { DomLayer.showError('Cannot chat with ' + selectedModel.name + ' \u2014 it is a ' + selectedModel.type + ' model.'); return; }
         if (attachment && !selectedModel.vision) { DomLayer.showError(selectedModel.name + ' does not support vision. Select a model with vision capability or remove the attachment.'); return; }
         StateManager.recompileSystemMessage();
+        const ragEnabled = StateManager.get('ragEnabled');
+        const ragChunks = StateManager.get('ragChunks') || [];
+        if (ragEnabled && ragChunks.length && msg && StateManager._ragIndex) {
+            const matches = retrieveChunks(msg, ragChunks, StateManager._ragIndex);
+            if (matches.length) {
+                const sysMsg = StateManager.get('conversationHistory')[0];
+                const refText = matches.map(c => '[Reference: ' + c.text + ']').join('\n\n');
+                sysMsg.content = (sysMsg.content || '') + '\n\n---\nRelevant reference document excerpts:\n' + refText;
+                DomLayer.showInfoInStatus('📄 ' + matches.length + ' chunks matched from reference doc');
+                DomLayer.updateRagIndicator(true);
+            }
+        } else {
+            DomLayer.updateRagIndicator(false);
+        }
         const maxCtx = parseCtx(selectedModel.ctx);
         const currentTokens = estimateTokens(history);
         const msgTokens = estimateTokens([{ role: 'user', content: msg || '...' }]);
@@ -1491,6 +1670,47 @@ const App = (() => {
         StateManager.set('lastToolCallSig', null);
         StateManager.set('lastToolCallRepeat', 0);
         startStream();
+    }
+
+    function startVoiceInput() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) { DomLayer.showToast('error', 'Voice input is not supported in this browser. Try Chrome or Edge.'); return; }
+        if (_streamState?.voiceReco) { _streamState.voiceReco.abort(); _streamState.voiceReco = null; document.getElementById('voice-btn').classList.remove('listening'); playSound('toggle'); return; }
+        const reco = new SpeechRecognition();
+        reco.continuous = false;
+        reco.interimResults = false;
+        reco.lang = 'en-US';
+        _streamState = _streamState || {};
+        _streamState.voiceReco = reco;
+        const btn = document.getElementById('voice-btn');
+        btn.classList.add('listening');
+        DomLayer.updateTerminalStatus('info', '🎤 Listening...');
+        AvatarEngine.startSpeaking();
+        playSound('select');
+        reco.onresult = (e) => {
+            const transcript = e.results[0][0].transcript;
+            const input = document.getElementById('terminal-input');
+            input.value = (input.value ? input.value + ' ' : '') + transcript;
+            input.dispatchEvent(new Event('input'));
+            input.focus();
+            DomLayer.showInfoInStatus('🎤 Transcribed: ' + transcript);
+            btn.classList.remove('listening');
+            AvatarEngine.stopSpeaking();
+            _streamState.voiceReco = null;
+        };
+        reco.onerror = (e) => {
+            if (e.error === 'aborted') return;
+            DomLayer.showToast('error', 'Voice input error: ' + e.error);
+            btn.classList.remove('listening');
+            AvatarEngine.stopSpeaking();
+            _streamState.voiceReco = null;
+        };
+        reco.onend = () => {
+            btn.classList.remove('listening');
+            AvatarEngine.stopSpeaking();
+            _streamState.voiceReco = null;
+        };
+        try { reco.start(); } catch (e) { DomLayer.showToast('error', 'Voice input failed to start.'); btn.classList.remove('listening'); _streamState.voiceReco = null; }
     }
 
     function regenerateResponse(responseElement) {
@@ -1568,8 +1788,10 @@ const App = (() => {
             },
             onError: (errMsg) => {
                 AvatarEngine.stopSpeaking();
+                DomLayer.stopSpeaking();
                 StateManager.set('isStreaming', false);
                 StateManager.set('abortController', null);
+                if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); }
                 if (streamState.tokenFlowInterval) { clearInterval(streamState.tokenFlowInterval); streamState.tokenFlowInterval = null; }
                 if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
                 DomLayer.updateSendStopButtons(false);
@@ -1599,6 +1821,7 @@ const App = (() => {
         StateManager.set('abortController', null);
         if (streamState.tokenFlowInterval) { clearInterval(streamState.tokenFlowInterval); streamState.tokenFlowInterval = null; }
         if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
+        if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); }
         const latency = Math.floor(performance.now() - streamState.startTime);
         if (streamState.tokenCount) DomLayer.updateTokenFlow(streamState.tokenCount / Math.max(latency / 1000, 0.1), streamState.tokenCount, latency / 1000);
         else DomLayer.updateTokenFlow(null);
@@ -1613,6 +1836,7 @@ const App = (() => {
         DomLayer.updateLatency(latency);
         DomLayer.updateTimestamp(streamState.container.element, latency, aborted);
         StateManager.saveConversation();
+        if (finalText && StateManager.get('ttsEnabled') && !aborted) DomLayer.speakResponse(finalText);
         DomLayer.updateContextMeter();
         DomLayer.updateSessionStats();
     }
@@ -1643,13 +1867,15 @@ const App = (() => {
     }
 
     function stopStreaming() {
-        if (!StateManager.get('isStreaming')) return;
+        if (!StateManager.get('isStreaming')) { DomLayer.stopSpeaking(); return; }
         playSound('stop');
         const ctrl = StateManager.get('abortController');
         if (ctrl) ctrl.abort();
         StateManager.set('isStreaming', false);
         StateManager.set('abortController', null);
         AvatarEngine.stopSpeaking();
+        DomLayer.stopSpeaking();
+        if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); }
         if (_streamState?.tokenFlowInterval) { clearInterval(_streamState.tokenFlowInterval); _streamState.tokenFlowInterval = null; }
         if (_streamState?.slowWarning) { clearTimeout(_streamState.slowWarning); _streamState.slowWarning = null; }
         DomLayer.updateSendStopButtons(false);
@@ -2038,6 +2264,7 @@ const App = (() => {
         window.addEventListener('beforeunload', (e) => { if (document.getElementById('terminal-input')?.value) { e.preventDefault(); e.returnValue = ''; } });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                if (_streamState?.voiceReco) { try { _streamState.voiceReco.abort(); } catch (e) {} _streamState.voiceReco = null; document.getElementById('voice-btn')?.classList.remove('listening'); return; }
                 if (StateManager.get('isStreaming')) { stopStreaming(); return; }
                 const vault = document.getElementById('vault-modal');
                 if (vault && !vault.classList.contains('hidden')) { toggleVault(); return; }
@@ -2067,6 +2294,28 @@ const App = (() => {
                 }
             }
         });
+        document.getElementById('export-btn').addEventListener('click', () => DomLayer.exportChat());
+        document.getElementById('voice-btn').addEventListener('click', startVoiceInput);
+        document.getElementById('rag-toggle').addEventListener('change', (e) => {
+            StateManager.set('ragEnabled', e.target.checked);
+            localStorage.setItem('war_chest_rag_enabled', JSON.stringify(e.target.checked));
+        });
+        document.getElementById('tts-toggle-btn').addEventListener('click', () => {
+            const enabled = !StateManager.get('ttsEnabled');
+            StateManager.set('ttsEnabled', enabled);
+            localStorage.setItem('war_chest_tts_enabled', JSON.stringify(enabled));
+            const btn = document.getElementById('tts-toggle-btn');
+            btn.classList.toggle('active', enabled);
+            btn.title = enabled ? 'Disable auto-speak' : 'Auto-speak responses';
+            DomLayer.showToast(enabled ? 'info' : 'info', enabled ? 'Auto-speak ON — AI responses will be read aloud' : 'Auto-speak OFF');
+        });
+        // tts toggle state normalization
+        if (StateManager.get('ttsEnabled')) {
+            const ttsBtn = document.getElementById('tts-toggle-btn');
+            if (ttsBtn) { ttsBtn.classList.add('active'); ttsBtn.title = 'Disable auto-speak'; }
+        }
+        // show tts toggle only if speech synthesis is available
+        if (window.speechSynthesis) document.getElementById('tts-toggle-btn').classList.remove('hidden');
         AvatarEngine.init();
         document.getElementById('terminal-input').style.height = document.getElementById('terminal-input').scrollHeight + 'px';
         setTimeout(() => playSound('poweron'), 300);
@@ -2077,7 +2326,7 @@ const App = (() => {
         }
     }
 
-    return { init, sendMessage, stopStreaming, selectModel, toggleVault, saveKeys, loadEnvFile, handleEnvFile, loadKeys, applySystemPrompt, resetSystemPrompt, loadPrompt, wipeSystem, handleAttachment, removeAttachment, regenerateResponse };
+    return { init, sendMessage, stopStreaming, selectModel, toggleVault, saveKeys, loadEnvFile, handleEnvFile, loadKeys, applySystemPrompt, resetSystemPrompt, loadPrompt, wipeSystem, handleAttachment, removeAttachment, regenerateResponse, startVoiceInput };
 })();
 
 // ============================================================

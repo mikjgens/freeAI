@@ -1,1 +1,5 @@
 .DS_Store
+.env
+.playwright-mcp/
+test-result-snapshot
+
