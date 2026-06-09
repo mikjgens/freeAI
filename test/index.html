@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>freeAI — Test Suite</title>
+    <style>
+        body { font-family: 'Courier New', monospace; background: #0a0a0a; color: #e0e0e0; padding: 24px; max-width: 800px; margin: 0 auto; }
+        h1 { color: #00ff41; border-bottom: 1px solid #1a1a1a; padding-bottom: 8px; }
+        .pass { color: #00ff41; }
+        .fail { color: #ff4444; }
+        .summary { margin-top: 24px; padding: 12px; border: 1px solid #333; }
+        .summary.pass { border-color: #00ff41; }
+        .summary.fail { border-color: #ff4444; }
+        .detail { margin: 4px 0 4px 20px; font-size: 12px; }
+        .detail.pass { color: #4ade80; }
+        .detail.fail { color: #f87171; }
+    </style>
+</head>
+<body>
+    <h1>freeAI — Test Suite</h1>
+    <div id="output"></div>
+    <div id="status" class="summary">Running...</div>
+    <script>
+        // Copy of utility functions from index.html
+        function parseCtx(ctxStr) {
+            if (!ctxStr || ctxStr === 'N/A') return Infinity;
+            const num = parseInt(ctxStr);
+            if (ctxStr.includes('M')) return num * 1024 * 1024;
+            if (ctxStr.includes('K')) return num * 1024;
+            return num;
+        }
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        function estimateTokens(history) {
+            let total = 0;
+            for (const msg of history) {
+                if (typeof msg.content === 'string') total += msg.content.length / 3.5;
+                else if (Array.isArray(msg.content)) for (const part of msg.content) { if (part.type === 'text') total += part.text.length / 3.5; if (part.type === 'image_url') total += 1000; }
+            }
+            return Math.ceil(total);
+        }
+        function parseApiError(status, body) {
+            try { const json = JSON.parse(body); if (json?.error?.message) return json.error.message; } catch (e) { }
+            const known = {
+                400: 'Bad request',
+                401: 'Unauthorized',
+                402: 'Payment required',
+                403: 'Forbidden',
+                404: 'Not found',
+                429: 'Rate limited',
+                500: 'Server error',
+                503: 'Service unavailable',
+            };
+            return known[status] || 'HTTP ' + status;
+        }
+        function safeEval(expr) {
+            const tokens = [];
+            let i = 0;
+            while (i < expr.length) {
+                const ch = expr[i];
+                if (ch === ' ') { i++; continue; }
+                if ('+-*/.()%'.includes(ch)) { tokens.push(ch); i++; continue; }
+                if (ch >= '0' && ch <= '9') {
+                    let num = '';
+                    while (i < expr.length && ((expr[i] >= '0' && expr[i] <= '9') || expr[i] === '.')) { num += expr[i]; i++; }
+                    tokens.push(parseFloat(num));
+                    continue;
+                }
+                throw new Error('Unexpected character: ' + ch);
+            }
+            let pos = 0;
+            function peek() { return pos < tokens.length ? tokens[pos] : null; }
+            function consume() { return tokens[pos++]; }
+            function parseAddSub() {
+                let left = parseMulDiv();
+                while (peek() === '+' || peek() === '-') {
+                    const op = consume();
+                    const right = parseMulDiv();
+                    left = op === '+' ? left + right : left - right;
+                }
+                return left;
+            }
+            function parseMulDiv() {
+                let left = parseUnary();
+                while (peek() === '*' || peek() === '/' || peek() === '%') {
+                    const op = consume();
+                    const right = parseUnary();
+                    if (op === '*') left = left * right;
+                    else if (op === '/') { if (right === 0) throw new Error('Division by zero'); left = left / right; }
+                    else left = left % right;
+                }
+                return left;
+            }
+            function parseUnary() {
+                if (peek() === '-') { consume(); return -parseAtom(); }
+                if (peek() === '+') { consume(); return parseAtom(); }
+                return parseAtom();
+            }
+            function parseAtom() {
+                if (peek() === '(') { consume(); const val = parseAddSub(); if (peek() !== ')') throw new Error('Missing closing parenthesis'); consume(); return val; }
+                if (typeof peek() === 'number') return consume();
+                throw new Error('Expected number or (');
+            }
+            const result = parseAddSub();
+            if (pos < tokens.length) throw new Error('Unexpected token after expression');
+            if (typeof result !== 'number' || !isFinite(result)) throw new Error('Result is not finite');
+            return result;
+        }
+
+        const log = document.getElementById('output');
+        const status = document.getElementById('status');
+        let passed = 0, failed = 0;
+        const tests = [];
+
+        function assert(name, fn) {
+            tests.push({ name, fn });
+        }
+
+        function approxEq(a, b, tol) {
+            return Math.abs(a - b) < (tol || 0.001);
+        }
+
+        assert('parseCtx — 131K', () => parseCtx('131K') === 131 * 1024);
+        assert('parseCtx — 1M', () => parseCtx('1M') === 1024 * 1024);
+        assert('parseCtx — N/A returns Infinity', () => parseCtx('N/A') === Infinity);
+        assert('parseCtx — empty string returns Infinity', () => parseCtx('') === Infinity);
+        assert('parseCtx — null returns Infinity', () => parseCtx(null) === Infinity);
+        assert('parseCtx — plain number string', () => parseCtx('32000') === 32000);
+
+        assert('safeEval — simple addition', () => safeEval('2 + 3') === 5);
+        assert('safeEval — subtraction', () => safeEval('10 - 4') === 6);
+        assert('safeEval — multiplication', () => safeEval('3 * 7') === 21);
+        assert('safeEval — division', () => safeEval('15 / 3') === 5);
+        assert('safeEval — modulo', () => safeEval('10 % 3') === 1);
+        assert('safeEval — operator precedence', () => safeEval('2 + 3 * 4') === 14);
+        assert('safeEval — parentheses', () => safeEval('(2 + 3) * 4') === 20);
+        assert('safeEval — decimals', () => safeEval('3.5 + 2.1') === 5.6);
+        assert('safeEval — unary minus', () => safeEval('-5 + 3') === -2);
+        assert('safeEval — unary plus', () => safeEval('+5 + 3') === 8);
+        assert('safeEval — nested parens', () => safeEval('((2 + 3) * (4 - 1)) / 5') === 3);
+        assert('safeEval — division by zero throws', () => {
+            try { safeEval('5 / 0'); return false; } catch (e) { return e.message === 'Division by zero'; }
+        });
+        assert('safeEval — missing paren throws', () => {
+            try { safeEval('(2 + 3'); return false; } catch (e) { return true; }
+        });
+
+        assert('estimateTokens — empty history', () => estimateTokens([]) === 0);
+        assert('estimateTokens — single string message', () => {
+            const h = [{ role: 'user', content: 'Hello world' }];
+            return estimateTokens(h) === Math.ceil('Hello world'.length / 3.5);
+        });
+        assert('estimateTokens — image adds 1000', () => {
+            const h = [{ role: 'user', content: [{ type: 'text', text: 'hi' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,' } }] }];
+            return estimateTokens(h) === Math.ceil('hi'.length / 3.5 + 1000);
+        });
+        assert('estimateTokens — multiple messages', () => {
+            const h = [{ role: 'system', content: 'You are a bot.' }, { role: 'user', content: 'Hi' }];
+            const expected = Math.ceil('You are a bot.'.length / 3.5) + Math.ceil('Hi'.length / 3.5);
+            return estimateTokens(h) === expected;
+        });
+
+        assert('parseApiError — known status', () => parseApiError(429, '') === 'Rate limited');
+        assert('parseApiError — unknown status', () => parseApiError(418, '').startsWith('HTTP 418'));
+        assert('parseApiError — parsed from body', () => {
+            return parseApiError(400, '{"error":{"message":"Bad request — check model ID"}}') === 'Bad request — check model ID';
+        });
+        assert('parseApiError — body without error field falls back', () => {
+            return parseApiError(404, 'Not found body') === 'Not found';
+        });
+
+        assert('escapeHtml — ampersand', () => escapeHtml('a & b') === 'a &amp; b');
+        assert('escapeHtml — angle brackets', () => escapeHtml('<script>') === '&lt;script&gt;');
+        assert('escapeHtml — quotes preserved', () => escapeHtml('"hello"') === '"hello"');
+
+        // Run all tests
+        async function run() {
+            for (const t of tests) {
+                try {
+                    const result = await t.fn();
+                    if (result) {
+                        passed++;
+                        log.innerHTML += '<div class="detail pass">✓ ' + t.name + '</div>';
+                    } else {
+                        failed++;
+                        log.innerHTML += '<div class="detail fail">✗ ' + t.name + ' — returned ' + result + '</div>';
+                    }
+                } catch (e) {
+                    failed++;
+                    log.innerHTML += '<div class="detail fail">✗ ' + t.name + ' — threw: ' + escapeHtml(e.message) + '</div>';
+                }
+            }
+            const total = passed + failed;
+            const pct = total ? Math.round(passed / total * 100) : 0;
+            const cls = failed === 0 ? 'pass' : 'fail';
+            status.className = 'summary ' + cls;
+            status.innerHTML = '<strong>' + passed + ' / ' + total + ' passed (' + pct + '%)</strong>' + (failed ? ' — ' + failed + ' FAILURES' : ' — All clear');
+        }
+
+        run();
+    </script>
+</body>
+</html>

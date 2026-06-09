@@ -1,0 +1,2090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <title>War Chest Command Center v2.6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/fontsource-jetbrains-mono@5.0.0/index.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+    <style>
+        body { font-family: 'JetBrains Mono', monospace; background-color: #050505; color: #e0e0e0; }
+        .terminal-text { color: #00ff41; text-shadow: 0 0 5px rgba(0, 255, 65, 0.5); }
+        .glass-panel { background: rgba(15, 15, 15, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0a0a0a; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #00ff41; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+        .model-item { transition: all 0.2s ease; border-left: 2px solid transparent; }
+        .model-item:hover { background: rgba(0, 255, 65, 0.05); border-left: 2px solid rgba(0, 255, 65, 0.5); }
+        .model-item.active { background: rgba(0, 255, 65, 0.1); border-left: 2px solid #00ff41; }
+        .glow-text { text-shadow: 0 0 10px rgba(0, 255, 65, 0.3); }
+        .scanlines { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to bottom,rgba(255,255,255,0),rgba(255,255,255,0) 50%,rgba(0,0,0,0.1) 50%,rgba(0,0,0,0.1)); background-size: 100% 4px; pointer-events: none; z-index: 9999; opacity: 0.3; }
+        @keyframes flicker { 0% { opacity: 0.97; } 5% { opacity: 0.95; } 10% { opacity: 0.9; } 15% { opacity: 0.95; } 20% { opacity: 0.99; } 50% { opacity: 0.95; } 80% { opacity: 0.9; } 100% { opacity: 0.97; } }
+        .crt-flicker { animation: flicker 0.15s infinite; }
+        .offline-banner { transition: transform 0.3s ease; }
+        .offline-banner.hidden { transform: translateY(-100%); }
+        .tag-pill { transition: all 0.15s ease; }
+        .tag-pill:hover { filter: brightness(1.3); }
+        .filter-btn { transition: all 0.15s ease; }
+        .filter-btn.active { background: rgba(0, 255, 65, 0.15); border-color: rgba(0, 255, 65, 0.5); color: #00ff41; }
+        .cap-filter-btn.active { border-color: rgba(0, 255, 65, 0.4); color: #00ff41; }
+        .msg-timestamp { font-size: 9px; opacity: 0.4; transition: opacity 0.2s; }
+        .msg-timestamp:hover { opacity: 0.8; }
+        .markdown-body code { background: rgba(0, 255, 65, 0.1); border: 1px solid rgba(0, 255, 65, 0.15); border-radius: 3px; padding: 1px 4px; font-size: 0.9em; }
+        .markdown-body pre { background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 4px; padding: 8px; overflow-x: auto; margin: 6px 0; }
+        .markdown-body pre code { background: none; border: none; padding: 0; }
+        .markdown-body ul, .markdown-body ol { padding-left: 1.5em; margin: 4px 0; }
+        .markdown-body li { list-style: inherit; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4 { color: #00ff41; margin: 8px 0 4px; }
+        .markdown-body h1 { font-size: 1.2em; }
+        .markdown-body h2 { font-size: 1.1em; }
+        .markdown-body h3 { font-size: 1.05em; }
+        .markdown-body h4 { font-size: 1em; }
+        .markdown-body p { margin: 4px 0; }
+        .markdown-body strong { color: #fff; }
+        .markdown-body a { color: #4ade80; text-decoration: underline; }
+        .markdown-body blockquote { border-left: 2px solid #00ff41; padding-left: 8px; margin: 4px 0; opacity: 0.8; }
+        .markdown-body hr { border: none; border-top: 1px solid rgba(0, 255, 65, 0.2); margin: 8px 0; }
+        .markdown-body table { border-collapse: collapse; margin: 6px 0; font-size: 0.9em; }
+        .markdown-body th, .markdown-body td { border: 1px solid rgba(255, 255, 255, 0.1); padding: 4px 8px; text-align: left; }
+        .markdown-body th { background: rgba(0, 255, 65, 0.1); color: #00ff41; }
+        #prompt-editor { scrollbar-width: thin; scrollbar-color: #2a2a2a transparent; overflow-y: auto; }
+        #prompt-editor:focus { box-shadow: 0 0 0 1px rgba(0, 255, 65, 0.2); }
+        #doc-drop-zone { min-height: 48px; transition: all 0.15s ease; }
+        #doc-drop-zone.drag-over { border-color: rgba(0, 255, 65, 0.5); background: rgba(0, 255, 65, 0.05); }
+        #image-drop-overlay { display: none; }
+        #chat-input-area.drag-over #image-drop-overlay { display: flex; }
+        #chat-input-area.drag-over .input-row, #chat-input-area.drag-over #attachment-preview { opacity: 0.3; pointer-events: none; }
+        #toast-container { position: fixed; top: 12px; right: 12px; z-index: 10001; display: flex; flex-direction: column; gap: 6px; pointer-events: none; max-width: 380px; }
+        .toast { pointer-events: auto; padding: 10px 14px; border-radius: 6px; font-size: 12px; font-family: 'JetBrains Mono', monospace; backdrop-filter: blur(12px); box-shadow: 0 4px 24px rgba(0,0,0,0.5); transform: translateX(120%); transition: transform 0.3s ease, opacity 0.3s ease; opacity: 0; }
+        .toast.show { transform: translateX(0); opacity: 1; }
+        .toast.success { background: rgba(0, 30, 10, 0.92); border: 1px solid rgba(0, 255, 65, 0.3); color: #4ade80; }
+        .toast.error { background: rgba(30, 0, 0, 0.92); border: 1px solid rgba(255, 50, 50, 0.3); color: #f87171; }
+        .toast.warning { background: rgba(30, 20, 0, 0.92); border: 1px solid rgba(255, 200, 50, 0.3); color: #fbbf24; }
+        .toast.info { background: rgba(0, 10, 30, 0.92); border: 1px solid rgba(50, 150, 255, 0.3); color: #60a5fa; }
+        #confirm-modal-overlay { display: none; }
+        #confirm-modal-overlay.open { display: flex; }
+        #confirm-modal-overlay .modal-box { transform: scale(0.95); transition: transform 0.2s ease; }
+        #confirm-modal-overlay.open .modal-box { transform: scale(1); }
+        #confirm-modal-input { font-family: 'JetBrains Mono', monospace; }
+        #scroll-bottom-btn { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); z-index: 15; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+        #scroll-bottom-btn.visible { opacity: 1; pointer-events: auto; }
+        #active-model-bar { transition: all 0.2s ease; }
+        .context-horizon { text-align: center; font-size: 9px; color: rgba(0, 255, 65, 0.35); letter-spacing: 2px; padding: 8px 0; border-top: 1px solid rgba(0, 255, 65, 0.08); border-bottom: 1px solid rgba(0, 255, 65, 0.08); margin: 8px 0; user-select: none; font-family: 'JetBrains Mono', monospace; }
+        .msg-archived { opacity: 0.3 !important; filter: grayscale(0.8) !important; pointer-events: none !important; transition: all 0.5s ease; }
+        .msg-action { opacity: 0; transition: opacity 0.15s ease; }
+        .msg-container:hover .msg-action { opacity: 1; }
+        #terminal-output { overflow-wrap: break-word; word-break: break-word; white-space: pre-wrap; }
+        #terminal-output > .msg-container { white-space: normal; }
+        #terminal-output .markdown-body { white-space: normal; }
+        #input-chars { transition: color 0.2s ease; }
+        .retry-btn { transition: all 0.15s ease; }
+        .retry-btn:hover { filter: brightness(1.3); }
+        #terminal-input { transition: height 0.25s ease-out; }
+        #chat-input-area { transition: all 0.25s ease-out; }
+        #chat-input-area.input-expanded { border-top-color: rgba(0,255,65,0.25); box-shadow: 0 -4px 24px rgba(0,255,65,0.06); }
+        @media (prefers-reduced-motion: reduce) { .crt-flicker { animation: none; } .scanlines { opacity: 0.15; } .blink { animation: none; opacity: 1; } .animate-pulse { animation: none; } .model-item, .filter-btn, .tag-pill, .offline-banner, #doc-drop-zone, .toast, #terminal-input, #chat-input-area { transition: none; } #scroll-bottom-btn { transition: none; } .msg-action { opacity: 1; } }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden selection:bg-green-500/30 selection:text-green-200 crt-flicker">
+    <div class="scanlines" aria-hidden="true"></div>
+    <div id="offline-banner" class="offline-banner hidden fixed top-0 left-0 right-0 z-[10000] bg-red-900/90 backdrop-blur-md border-b border-red-500/30 px-4 py-2 text-center text-sm text-red-200 font-bold tracking-wider">⚠️ OFFLINE — Check your network connection</div>
+    <div id="toast-container" role="status" aria-live="polite" aria-label="Notifications"></div>
+    <header class="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-black/60 backdrop-blur-md z-10">
+        <div class="flex items-center gap-4">
+            <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.8)]"></div>
+            <h1 class="text-xl font-bold tracking-widest text-white">COMMAND CENTER <span class="text-green-500 glow-text">v2.6</span></h1>
+            <span class="px-2 py-0.5 text-[10px] font-bold border border-green-500/30 text-green-400 rounded bg-green-500/5 tracking-wider">WAR CHEST A.I.</span>
+            <span class="px-2 py-0.5 text-[10px] font-bold border border-blue-500/30 text-blue-400 rounded bg-blue-500/5 tracking-wider">MULTI-MODEL DEPLOYMENT</span>
+            <div class="hidden md:flex items-center gap-1 h-4 ml-4" id="token-flow"></div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="hidden sm:flex items-center gap-2" id="context-meter">
+                <span id="context-meter-label" class="text-[10px] text-green-400 font-bold font-mono"></span>
+                <div class="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden border border-gray-700/50">
+                    <div id="context-meter-bar" class="h-full transition-all duration-500 ease-out rounded-full" style="width:0%"></div>
+                </div>
+                <span id="context-meter-pct" class="text-[10px] text-gray-500 font-mono min-w-[28px] text-right"></span>
+            </div>
+            <button id="audio-toggle-btn" class="px-3 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-green-500/50 rounded transition-all hover:border-green-400" title="Mute sounds" aria-label="Toggle audio on or off">🔊</button>
+        </div>
+    </header>
+    <main class="flex-1 grid grid-cols-12 gap-4 p-4 overflow-hidden relative z-10">
+        <aside class="col-span-12 lg:col-span-3 flex flex-col gap-4 overflow-y-auto order-3 lg:order-1" role="region" aria-label="System configuration panel">
+            <div class="glass-panel rounded-lg p-4">
+                <h2 class="text-xs font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-2 mb-1">⚙️ System</h2>
+                <button id="vault-btn" class="w-full text-left px-3 py-2.5 rounded bg-gray-800/30 hover:bg-gray-700/50 border border-gray-700/50 text-sm flex items-center gap-3 transition-all group" aria-label="Open API keys and vault configuration"><span class="text-lg group-hover:scale-110 transition-transform">🔑</span><div><div class="font-bold text-gray-300">API Keys &amp; Vault</div><div class="text-[10px] text-gray-500">Manage external routing</div></div></button>
+                <button id="wipe-btn" class="w-full text-left px-3 py-2.5 rounded bg-red-950/30 hover:bg-red-900/40 border border-red-900/50 text-red-400 text-sm flex items-center gap-3 transition-all mt-2 group" aria-label="Wipe all local data"><span class="text-lg group-hover:scale-110 transition-transform">🗑️</span><div><div class="font-bold">Wipe System</div><div class="text-[10px] text-red-400/60">Clear all local data</div></div></button>
+            </div>
+            <div class="glass-panel rounded-lg p-4 flex-1 flex flex-col min-h-0">
+                <div class="flex-[2] flex flex-col min-h-0 mb-3">
+                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-widest border-b border-gray-800 pb-2 mb-3 flex items-center justify-between shrink-0"><span>🧠 System Prompt</span><span id="prompt-chars" class="text-gray-600 font-normal text-[10px] font-mono">0c</span></h2>
+                    <textarea id="prompt-editor" class="w-full flex-1 min-h-0 bg-black/60 border border-gray-700 rounded px-3 py-2 text-sm text-white font-mono resize-none focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all placeholder-gray-600" placeholder="Enter the system prompt that sets the AI's behavior...">You are an elite tactical AI operating within the War Chest Command Center. Be concise, highly accurate, and structure outputs beautifully using markdown.</textarea>
+                    <div class="flex gap-2 mt-2 shrink-0">
+                        <button id="apply-prompt-btn" class="flex-1 px-3 py-1.5 text-xs font-bold bg-green-700/40 hover:bg-green-600/60 border border-green-500/30 text-green-400 rounded transition-all" aria-label="Apply system prompt">Apply Prompt</button>
+                        <button id="reset-prompt-btn" class="px-3 py-1.5 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700 text-gray-400 rounded transition-all" aria-label="Reset system prompt to default">Reset</button>
+                    </div>
+                </div>
+                <div class="flex-1 border-t border-gray-800 pt-3 flex flex-col min-h-0">
+                    <h2 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 shrink-0">📄 Reference Doc</h2>
+                    <div id="doc-drop-zone" class="flex-1 min-h-0 relative border-2 border-dashed border-gray-700 rounded-lg p-3 text-center cursor-pointer transition-all hover:border-green-500/30 text-gray-500 text-xs font-mono">
+                        <div id="doc-empty-state"><div class="text-lg mb-1">📁</div><div>Drop a .md or .txt file here</div><div class="text-[9px] text-gray-600 mt-1">or click to browse</div></div>
+                        <div id="doc-drop-overlay" class="hidden absolute inset-0 bg-green-900/20 border-2 border-green-500/50 rounded-lg items-center justify-center text-green-400 font-bold z-10">📄 Drop to attach</div>
+                        <div id="doc-loaded-state" class="hidden flex items-center gap-2 text-left"><span class="text-lg">📄</span><span id="doc-filename" class="text-green-400 font-bold flex-1 truncate"></span><span id="doc-filesize" class="text-[10px] text-gray-500"></span><button id="doc-remove-btn" class="text-red-400 hover:text-red-300 text-lg leading-none px-1">&times;</button></div>
+                    </div>
+                    <input type="file" id="doc-file-input" accept=".md,.txt" class="hidden">
+                </div>
+                <div class="mt-auto pt-3 border-t border-gray-800 shrink-0">
+                    <div class="flex justify-between text-[10px] text-gray-500 font-mono"><span>⚡ <span id="last-latency">0ms</span></span><span>💬 <span id="msg-count">0</span></span></div>
+                </div>
+            </div>
+        </aside>
+        <section class="col-span-12 lg:col-span-6 flex flex-col glass-panel rounded-lg overflow-hidden border-gray-800 order-1 lg:order-2 relative" role="region" aria-label="Chat terminal">
+            <div class="px-4 py-3 bg-gray-900/80 border-b border-gray-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <canvas id="ai-face" width="32" height="32" class="w-8 h-8 md:w-10 md:h-10" style="image-rendering: pixelated; box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);"></canvas>
+                    <span class="text-xs font-bold text-gray-400 tracking-wider flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span id="terminal-status">▼ AWAITING INPUT</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span id="terminal-system-header" class="text-[10px] text-green-500/60 font-bold tracking-widest">⚡ SYSTEM INITIALIZED</span>
+                    <div class="flex gap-1.5"><div class="w-2.5 h-2.5 rounded-full bg-red-500/40"></div><div class="w-2.5 h-2.5 rounded-full bg-yellow-500/40"></div><div class="w-2.5 h-2.5 rounded-full bg-green-500/40"></div></div>
+                </div>
+            </div>
+            <div id="terminal-output" class="flex-1 p-4 overflow-y-auto custom-scrollbar space-y-3 text-sm bg-black/20">
+                <div class="text-gray-400 flex items-center gap-1">Awaiting tactical input...<span class="blink text-green-500">█</span></div>
+            </div>
+            <div class="p-4 border-t border-gray-800 bg-gray-900/60 relative" id="chat-input-area">
+                <div id="image-drop-overlay" class="absolute inset-0 z-20 bg-black/85 border-2 border-dashed border-green-500/40 rounded-lg items-center justify-center backdrop-blur-[2px]"><span class="text-green-400 font-bold text-sm flex items-center gap-2">📸 Drop image here<span class="text-gray-500 font-normal text-[10px]">JPG, PNG, GIF, WebP · max 20MB</span></span></div>
+                <div id="active-model-bar" class="hidden items-center gap-2 mb-2 px-3 py-1.5 bg-gray-800/40 rounded border border-gray-700/40 text-[10px]"><span class="text-gray-500">Active:</span><span id="active-model-name" class="text-green-400 font-bold"></span><span id="active-model-extra" class="text-gray-500"></span></div>
+                <div id="attachment-preview" class="hidden items-center gap-2 mb-2 px-3 py-2 bg-gray-800/40 rounded border border-gray-700/50 text-xs"><img id="attach-thumb" class="w-8 h-8 rounded object-cover border border-gray-600"><span id="attach-name" class="text-gray-300 flex-1 truncate"></span><span class="text-[10px] text-gray-500">attached</span><button id="remove-attach-btn" class="text-red-400 hover:text-red-300 text-lg leading-none px-1">&times;</button></div>
+                <div class="flex gap-2 input-row">
+                    <button id="attach-btn" class="px-3 py-2.5 rounded bg-gray-800/50 hover:bg-gray-700 border border-gray-700 text-gray-400 transition-colors text-lg" title="Attach image" aria-label="Attach image">📎</button>
+                    <textarea id="terminal-input" placeholder="Enter command or message..." class="flex-1 bg-black/60 border border-gray-700 rounded px-4 py-2.5 text-sm text-white focus:outline-none focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all placeholder-gray-600 font-mono resize-none overflow-y-auto" rows="1" aria-label="Message input"></textarea>
+                    <button id="send-btn" class="px-5 py-2.5 rounded bg-green-600 hover:bg-green-500 text-black font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(22,163,74,0.3)] hover:shadow-[0_0_20px_rgba(22,163,74,0.5)]" aria-label="Send message">SEND ❯</button>
+                    <button id="stop-btn" class="hidden px-4 py-2.5 rounded bg-red-700 hover:bg-red-600 text-white font-bold text-sm transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(220,38,38,0.3)]" aria-label="Stop streaming">⏹ STOP</button>
+                </div>
+                <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp" class="hidden">
+                <div class="flex justify-between items-center mt-1.5">
+                    <div id="input-chars" class="text-[10px] text-gray-600">0 characters</div>
+                    <div class="flex items-center gap-2"><span id="active-model-indicator" class="text-[10px] text-gray-600 hidden">Model: <span id="active-model-indicator-name" class="text-green-400 font-bold"></span></span><span class="text-[10px] text-gray-500">Enter to send · Shift+Enter for newline</span></div>
+                </div>
+            </div>
+            <button id="scroll-bottom-btn" class="px-3 py-1.5 rounded-full bg-green-700/70 hover:bg-green-600 text-black text-xs font-bold shadow-lg border border-green-500/30 flex items-center gap-1.5 transition-all" aria-label="Scroll to bottom">⬇</button>
+        </section>
+        <aside class="col-span-12 lg:col-span-3 flex flex-col glass-panel rounded-lg overflow-hidden border-gray-800 order-2 lg:order-3" role="region" aria-label="Model fleet selection">
+            <div class="px-4 py-3 bg-gray-900/80 border-b border-gray-800">
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">🧠 🎯 Primary Fleet Selection</h2>
+                <div id="filter-bar" class="flex flex-wrap gap-1 mt-2" role="group" aria-label="Model provider filter">
+                    <button data-filter="all" class="filter-btn active px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Show all models">All</button>
+                    <button data-filter="groq" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter Groq models">🟢 Groq</button>
+                    <button data-filter="openrouter" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter OpenRouter models">🟠 OR</button>
+                    <button data-filter="google" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter Google models">🔵 Google</button>
+                    <button data-filter="nvidia" class="filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded bg-gray-800/30 text-gray-400 uppercase tracking-wider" aria-label="Filter NVIDIA models">🟣 NVIDIA</button>
+                    <span class="w-px h-4 bg-gray-700/50 self-center mx-0.5"></span>
+                    <button data-cap-filter="vision" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded-full bg-gray-800/30 text-gray-500 uppercase tracking-wider hover:border-cyan-500/30 hover:text-cyan-400 transition-all" aria-label="Filter vision models">👁 Vision</button>
+                    <button data-cap-filter="tools" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded-full bg-gray-800/30 text-gray-500 uppercase tracking-wider hover:border-green-500/30 hover:text-green-400 transition-all" aria-label="Filter models with tools">🔧 Tools</button>
+                    <button data-cap-filter="fast" class="cap-filter-btn px-2 py-0.5 text-[9px] font-bold border border-gray-700 rounded-full bg-gray-800/30 text-gray-500 uppercase tracking-wider hover:border-yellow-500/30 hover:text-yellow-400 transition-all" aria-label="Filter fast models">⚡ Fast</button>
+                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1" id="model-list" role="listbox" aria-label="Available models"></div>
+            <div class="p-4 border-t border-gray-800 bg-gray-900/60">
+                <div class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">📊 Model Profile</div>
+                <div id="model-profile" class="text-xs text-gray-400 font-mono leading-relaxed">Select a model from the fleet to view detailed telemetry and capabilities...</div>
+            </div>
+        </aside>
+    </main>
+    <div id="vault-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 transition-opacity duration-300">
+        <div class="glass-panel w-full max-w-lg rounded-lg border border-green-500/20 shadow-2xl shadow-green-900/10 transform transition-all scale-100">
+            <div class="px-6 py-4 border-b border-gray-800 flex justify-between items-center bg-gray-900/80 rounded-t-lg">
+                <h3 class="text-base font-bold text-green-400 flex items-center gap-2 tracking-wider"><span>🔑</span> CONFIG.YAML // SECURE VAULT</h3>
+                <button id="vault-close-btn" class="text-gray-500 hover:text-white transition-colors text-xl hover:rotate-90 duration-300" aria-label="Close vault">✕</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex items-start gap-3 p-3 rounded bg-yellow-900/10 border border-yellow-500/20"><span class="text-yellow-500 mt-0.5">⚠️</span><p class="text-xs text-yellow-500/80 leading-relaxed">INFO: Keys are stored locally in your browser's localStorage. Required for external API routing. Never share these keys.</p></div>
+                <div class="space-y-4">
+                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">GROQ_API_KEY <span class="text-green-500 font-normal">Custom Provider</span></label><div class="relative"><input type="password" id="key-groq" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-green-500 focus:ring-1 focus:ring-green-500/20 outline-none transition-all font-mono pr-8" placeholder="gsk_..." aria-label="Groq API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
+                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">OPENROUTER_API_KEY <span class="text-blue-500 font-normal">Fallback</span></label><div class="relative"><input type="password" id="key-openrouter" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono pr-8" placeholder="sk-or-v1-..." aria-label="OpenRouter API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
+                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">GOOGLE_API_KEY <span class="text-red-500 font-normal">Vision / Fallback</span></label><div class="relative"><input type="password" id="key-google" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-red-500 focus:ring-1 focus:ring-red-500/20 outline-none transition-all font-mono pr-8" placeholder="AIza..." aria-label="Google API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
+                    <div class="group"><label class="block text-xs font-bold text-gray-400 mb-1.5 flex justify-between">NVIDIA_API_KEY <span class="text-purple-500 font-normal">Fallback</span></label><div class="relative"><input type="password" id="key-nvidia" class="w-full bg-black/60 border border-gray-700 rounded px-3 py-2.5 text-sm text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all font-mono pr-8" placeholder="nvapi-..." aria-label="NVIDIA API key"><button type="button" class="eye-toggle absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-sm px-1" aria-label="Toggle API key visibility">👁</button></div></div>
+                </div>
+                <div class="flex gap-3 mt-6">
+                    <button id="save-keys-btn" class="flex-1 py-3 bg-green-600 hover:bg-green-500 text-black font-bold rounded transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(22,163,74,0.2)] hover:shadow-[0_0_25px_rgba(22,163,74,0.4)]" aria-label="Save API keys"><span>💾</span> COMMIT CONFIG</button>
+                    <button id="load-env-btn" class="px-4 py-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-green-500/50 text-gray-300 font-bold rounded transition-all text-sm flex items-center gap-2" aria-label="Load API keys from .env file" title="Select your .env file (Cmd+Shift+. to show hidden files)"><span>📂</span> .env</button>
+                </div>
+                <input type="file" id="env-file-input" class="hidden">
+            </div>
+        </div>
+    </div>
+    <div id="confirm-modal-overlay" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div class="modal-box glass-panel w-full max-w-md rounded-lg border border-green-500/20 shadow-2xl shadow-green-900/10">
+            <div class="px-6 py-4 border-b border-gray-800 bg-gray-900/80 rounded-t-lg"><h3 id="confirm-modal-title" class="text-base font-bold text-green-400 tracking-wider">Confirm Action</h3></div>
+            <div class="p-6 space-y-4">
+                <p id="confirm-modal-message" class="text-sm text-gray-300 leading-relaxed"></p>
+                <div id="confirm-modal-typed-section" class="hidden"><label class="block text-xs font-bold text-gray-400 mb-1.5">Type <span id="confirm-modal-typed-word" class="text-red-400 font-mono"></span> to confirm:</label><input type="text" id="confirm-modal-input" class="w-full bg-black/60 border border-red-700 rounded px-3 py-2.5 text-sm text-white focus:border-red-500 focus:ring-1 focus:ring-red-500/20 outline-none transition-all" placeholder=""></div>
+                <div class="flex gap-3 justify-end">
+                    <button id="confirm-modal-cancel" class="px-4 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700 text-gray-400 rounded transition-all">Cancel</button>
+                    <button id="confirm-modal-ok" class="px-4 py-2 text-xs font-bold bg-green-700/40 hover:bg-green-600/60 border border-green-500/30 text-green-400 rounded transition-all">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+<script>
+// ============================================================
+// 1. SOUND SYSTEM — DOS-style chiptune effects
+// ============================================================
+let audioCtx;
+function armAudio() {
+    if (audioCtx) return;
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+document.addEventListener('click', armAudio, { capture: true, once: true });
+document.addEventListener('keydown', armAudio, { capture: true, once: true });
+
+const PENTATONIC = [523, 587, 659, 784, 880, 1047];
+function playSound(type, freqOverride) {
+    try { if (StateManager.get('audioMuted')) return; } catch (e) {}
+    if (!audioCtx || document.hidden) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    if (playSound._last && now - playSound._last < 0.04 && type === playSound._lastType) return;
+    playSound._last = now;
+    playSound._lastType = type;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    switch (type) {
+        case 'click': osc.type = 'square'; osc.frequency.setValueAtTime(1000, now); gain.gain.setValueAtTime(0.03, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035); osc.start(now); osc.stop(now + 0.035); break;
+        case 'type': osc.type = 'square'; osc.frequency.setValueAtTime(freqOverride || 800 + Math.random() * 600, now); gain.gain.setValueAtTime(0.02, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.025); osc.start(now); osc.stop(now + 0.025); break;
+        case 'keyclick': osc.type = 'sine'; osc.frequency.setValueAtTime(freqOverride || 660, now); gain.gain.setValueAtTime(0.008, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.015); osc.start(now); osc.stop(now + 0.015); break;
+        case 'start': osc.type = 'square'; osc.frequency.setValueAtTime(523, now); osc.frequency.setValueAtTime(659, now + 0.07); gain.gain.setValueAtTime(0.06, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18); osc.start(now); osc.stop(now + 0.18); break;
+        case 'done': osc.type = 'square'; osc.frequency.setValueAtTime(784, now); osc.frequency.setValueAtTime(659, now + 0.09); osc.frequency.setValueAtTime(523, now + 0.18); gain.gain.setValueAtTime(0.06, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32); osc.start(now); osc.stop(now + 0.32); break;
+        case 'error': osc.type = 'sawtooth'; osc.frequency.setValueAtTime(200, now); osc.frequency.linearRampToValueAtTime(80, now + 0.3); gain.gain.setValueAtTime(0.07, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3); osc.start(now); osc.stop(now + 0.3); break;
+        case 'poweron': osc.type = 'square'; osc.frequency.setValueAtTime(262, now); osc.frequency.setValueAtTime(330, now + 0.09); osc.frequency.setValueAtTime(392, now + 0.18); osc.frequency.setValueAtTime(523, now + 0.27); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4); osc.start(now); osc.stop(now + 0.4); break;
+        case 'select': osc.type = 'square'; osc.frequency.setValueAtTime(660, now); gain.gain.setValueAtTime(0.04, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05); osc.start(now); osc.stop(now + 0.05); break;
+        case 'toggle': osc.type = 'square'; osc.frequency.setValueAtTime(440, now); osc.frequency.setValueAtTime(880, now + 0.05); gain.gain.setValueAtTime(0.03, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1); osc.start(now); osc.stop(now + 0.1); break;
+        case 'stop': osc.type = 'square'; osc.frequency.setValueAtTime(200, now); osc.frequency.linearRampToValueAtTime(500, now + 0.08); gain.gain.setValueAtTime(0.04, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12); osc.start(now); osc.stop(now + 0.12); break;
+        case 'deploy': osc.type = 'square'; osc.frequency.setValueAtTime(523, now); osc.frequency.setValueAtTime(784, now + 0.08); gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18); osc.start(now); osc.stop(now + 0.18); break;
+        case 'wipe': osc.type = 'square'; osc.frequency.setValueAtTime(300, now); osc.frequency.linearRampToValueAtTime(100, now + 0.35); gain.gain.setValueAtTime(0.06, now); gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35); osc.start(now); osc.stop(now + 0.35); break;
+    }
+}
+
+// ============================================================
+// 2. AVATAR ENGINE — pixel-art sprite strip (IIFE, dirty-state)
+// ============================================================
+const AvatarEngine = (() => {
+    const canvas = document.getElementById('ai-face');
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const face = [
+        "    X      X    ", "    X XXXX X    ", "     XXXXXX     ", "    XXXXXXXX    ",
+        "  XX  XX  XX  X ", " X   XX  XX   X ", " X  XXXXXXXX  X ", " X  X      X  X ",
+        " X  XXXXXXXX  X ", "  XX        XX  ", "   XXXXXXXXXX   ", "                ",
+        "                ", "                ", "                ", "                "
+    ];
+    const FW = 16, FH = 16, BG = '#050505', FG = '#00ff41', DY = 3;
+    const strip = document.createElement('canvas');
+    strip.width = FW * 4;
+    strip.height = FH;
+    const sCtx = strip.getContext('2d');
+    sCtx.imageSmoothingEnabled = false;
+    function drawBase(c, ox, oy) {
+        c.fillStyle = BG; c.fillRect(ox, oy, FW, FH);
+        c.fillStyle = FG;
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) { if (face[y][x] === 'X') c.fillRect(ox + x, oy + y + DY, 1, 1); }
+    }
+    drawBase(sCtx, 0, 0);
+    drawBase(sCtx, 16, 0);
+    sCtx.fillStyle = BG; sCtx.fillRect(16 + 3, 8 + DY, 10, 1);
+    sCtx.fillStyle = FG; sCtx.fillRect(16 + 3, 9 + DY, 10, 1);
+    drawBase(sCtx, 32, 0);
+    sCtx.fillStyle = BG; sCtx.fillRect(32 + 5, 5 + DY, 2, 1); sCtx.fillRect(32 + 9, 5 + DY, 2, 1);
+    drawBase(sCtx, 48, 0);
+    sCtx.fillStyle = BG; sCtx.fillRect(48 + 3, 8 + DY, 10, 1);
+    sCtx.fillStyle = FG; sCtx.fillRect(48 + 3, 9 + DY, 10, 1);
+    sCtx.fillStyle = BG; sCtx.fillRect(48 + 5, 5 + DY, 2, 1); sCtx.fillRect(48 + 9, 5 + DY, 2, 1);
+    let state = { speaking: false, blinkFrame: 0, lastMouthOpen: false, needsRedraw: true };
+    let animId = null;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function render() {
+        if (reducedMotion) return;
+        if (state.blinkFrame > 0) { state.blinkFrame--; state.needsRedraw = true; }
+        else if (Math.random() < 0.01) { state.blinkFrame = 6; state.needsRedraw = true; }
+        const mouthOpen = state.speaking && Math.floor(Date.now() / 100) % 2 === 0;
+        if (mouthOpen !== state.lastMouthOpen) { state.lastMouthOpen = mouthOpen; state.needsRedraw = true; }
+        if (state.needsRedraw) {
+            const blink = state.blinkFrame > 0;
+            let fi = 0;
+            if (blink && mouthOpen) fi = 3; else if (blink) fi = 2; else if (mouthOpen) fi = 1;
+            ctx.drawImage(strip, fi * FW, 0, FW, FH, 0, 0, 32, 32);
+            state.needsRedraw = false;
+        }
+        animId = requestAnimationFrame(render);
+    }
+    return {
+        init: () => {
+            if (reducedMotion) { ctx.fillStyle = BG; ctx.fillRect(0, 0, 32, 32); ctx.drawImage(strip, 0, 0, FW, FH, 0, 0, 32, 32); return; }
+            if (!animId) animId = requestAnimationFrame(render);
+        },
+        startSpeaking: () => { state.speaking = true; state.needsRedraw = true; },
+        stopSpeaking: () => { state.speaking = false; state.needsRedraw = true; }
+    };
+})();
+// ============================================================
+// 3. MODEL FLEET DATA — static array
+// ============================================================
+const models = [
+    { provider: 'groq', color: '🟢', name: 'Qwen3 32B', desc: 'Primary Fallback — 60 RPM', ctx: '131K', tools: 'Function Calling', modelId: 'qwen/qwen3-32b', type: 'chat', tags: ['balanced', 'coding', 'fast'], weakness: 'lower reasoning depth vs 70B+ models' },
+    { provider: 'groq', color: '🟢', name: 'Llama 4 Scout', desc: 'Vision — 20MB Images', ctx: '131K', tools: 'Function Calling', modelId: 'meta-llama/llama-4-scout-17b-16e-instruct', type: 'chat', vision: true, tags: ['vision', 'multimodal', 'image-understanding'], weakness: 'no audio/video input' },
+    { provider: 'groq', color: '🟢', name: 'GROQ Compound', desc: '70K TPM — No TPD Cap', ctx: '131K', tools: 'Built-in Tools', builtInTools: ['web_search', 'code_execution', 'browser_automation'], modelId: 'groq/compound', type: 'chat', tags: ['agentic', 'web-search', 'code-exec', 'browser-automation'], weakness: 'tool calls incur extra cost' },
+    { provider: 'groq', color: '🟢', name: 'Llama 3.3 70B', desc: 'Smartest — 280 t/s', ctx: '131K', tools: 'Function Calling', modelId: 'llama-3.3-70b-versatile', type: 'chat', tags: ['reasoning', 'smartest', 'fast-inference'], weakness: 'not multimodal' },
+    { provider: 'groq', color: '🟢', name: 'GROQ Compound Mini', desc: 'High-volume compression', ctx: '131K', tools: 'Built-in Tools', builtInTools: ['web_search'], modelId: 'groq/compound-mini', type: 'chat', tags: ['agentic', 'single-tool', 'low-latency'], weakness: 'single-tool only, less capable than full Compound' },
+    { provider: 'groq', color: '🟢', name: 'GPT-OSS-120B', desc: 'Heavy coding, built-in tools', ctx: '131K', tools: 'Function Calling', builtInTools: ['web_search', 'browser_search'], modelId: 'openai/gpt-oss-120b', type: 'chat', tags: ['coding', 'open-weights', 'reasoning'], weakness: 'higher latency than 20B variant' },
+    { provider: 'groq', color: '🟢', name: 'GPT-OSS-20B', desc: 'Speed layer — 1000+ t/s', ctx: '131K', tools: 'Function Calling', builtInTools: ['web_search', 'browser_search'], modelId: 'openai/gpt-oss-20b', type: 'chat', tags: ['speed', 'lightweight', 'high-throughput'], weakness: 'less capable on complex reasoning' },
+    { provider: 'groq', color: '🟢', name: 'Llama 3.1 8B', desc: 'Volume — 500K TPD', ctx: '131K', tools: 'Function Calling', modelId: 'llama-3.1-8b-instant', type: 'chat', tags: ['high-volume', 'fastest', 'budget'], weakness: 'basic reasoning, small context depth' },
+    { provider: 'openrouter', color: '🟠', name: 'Owl Alpha', desc: 'Smart Agent — 1M ctx', ctx: '1M', tools: 'Function Calling', modelId: 'openrouter/owl-alpha', type: 'chat', vision: true, tags: ['agentic', 'long-context', 'coding', 'tool-use'], weakness: 'slow speed (19th percentile), weak general knowledge' },
+    { provider: 'openrouter', color: '🟠', name: 'Qwen3 Coder', desc: 'Best for Code — 1M ctx', ctx: '1M', tools: 'Function Calling', modelId: 'qwen/qwen3-coder:free', type: 'chat', tags: ['coding', 'long-context', 'excellent'], weakness: 'narrow focus — coding only' },
+    { provider: 'openrouter', color: '🟠', name: 'Nemotron-3 Super', desc: 'Deep Logic — 1M ctx', ctx: '1M', tools: 'Function Calling', modelId: 'nvidia/nemotron-3-super-120b-a12b:free', type: 'chat', tags: ['reasoning', 'deep-logic', 'large-model'], weakness: 'free tier may have rate limits' },
+    { provider: 'openrouter', color: '🟠', name: 'Gemma 4 31B', desc: 'Frontier Reasoning', ctx: '262K', tools: 'Function Calling', modelId: 'google/gemma-4-31b-it:free', type: 'chat', tags: ['reasoning', 'frontier', 'google'], weakness: 'free tier rate-limited' },
+    { provider: 'openrouter', color: '🟠', name: 'Gemma 4 26B', desc: 'Efficient Vision MoE', ctx: '262K', tools: 'Function Calling', modelId: 'google/gemma-4-26b-a4b-it:free', type: 'chat', tags: ['efficient', 'vision', 'moe'], weakness: 'MoE may have unpredictable latency' },
+    { provider: 'openrouter', color: '🟠', name: 'Kimi K2.6', desc: 'Agent Swarm — 100+ agents', ctx: '262K', tools: 'Function Calling', modelId: 'moonshotai/kimi-k2.6:free', type: 'chat', tags: ['agentic', 'multi-agent', 'swarm'], weakness: 'complex setup, overkill for simple Q&A' },
+    { provider: 'openrouter', color: '🟠', name: 'Qwen3 Next 80B', desc: 'Fast — No thinking overhead', ctx: '262K', tools: 'Function Calling', modelId: 'qwen/qwen3-next-80b-a3b-instruct:free', type: 'chat', tags: ['fast', 'efficient', 'no-thinking-overhead'], weakness: 'less capable than full thinking models' },
+    { provider: 'openrouter', color: '🟠', name: 'Laguna M1', desc: 'SWE Agent — Complex', ctx: '262K', tools: 'Function Calling', modelId: 'poolside/laguna-m.1:free', type: 'chat', tags: ['swe', 'coding', 'agentic'], weakness: 'narrow — software engineering only' },
+    { provider: 'openrouter', color: '🟠', name: 'Laguna XS2', desc: 'SWE Agent — Lightweight', ctx: '262K', tools: 'Function Calling', modelId: 'poolside/laguna-xs.2:free', type: 'chat', tags: ['swe', 'lightweight', 'agentic'], weakness: 'less capable than M1 for complex tasks' },
+    { provider: 'openrouter', color: '🟠', name: 'Nemotron Nano Omni', desc: 'Vision+Audio+Tools', ctx: '256K', tools: 'Function Calling', modelId: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', type: 'chat', vision: true, tags: ['multimodal', 'vision', 'audio', 'omnimodal'], weakness: 'novel model, ecosystem young' },
+    { provider: 'openrouter', color: '🟠', name: 'Nemotron Nano 30B', desc: 'Open weights, privacy', ctx: '256K', tools: 'Function Calling', modelId: 'nvidia/nemotron-3-nano-30b-a3b:free', type: 'chat', tags: ['open-weights', 'privacy', 'efficient'], weakness: 'less capable than larger Nemotron models' },
+    { provider: 'openrouter', color: '🟠', name: 'OpenRouter Free', desc: 'Smart router: auto-selects', ctx: '200K', tools: 'Function Calling', modelId: 'openrouter/free', type: 'chat', tags: ['router', 'auto-select', 'fallback'], weakness: 'no control over which model responds' },
+    { provider: 'openrouter', color: '🟠', name: 'GPT-OSS-120B (OR)', desc: 'OpenAI open-weight', ctx: '131K', tools: 'Function Calling', modelId: 'openai/gpt-oss-120b:free', type: 'chat', tags: ['open-weights', 'coding', 'reasoning'], weakness: 'free tier — variable reliability' },
+    { provider: 'openrouter', color: '🟠', name: 'Llama 3.3 70B (OR)', desc: 'Most widely deployed', ctx: '131K', tools: 'Function Calling', modelId: 'meta-llama/llama-3.3-70b-instruct:free', type: 'chat', tags: ['popular', 'well-tested', 'reasoning'], weakness: 'no multimodal support' },
+    { provider: 'openrouter', color: '🟠', name: 'GPT-OSS-20B (OR)', desc: 'Fast — 21B MoE', ctx: '131K', tools: 'Function Calling', modelId: 'openai/gpt-oss-20b:free', type: 'chat', tags: ['fast', 'lightweight', 'moe'], weakness: 'less capable than 120B variant' },
+    { provider: 'openrouter', color: '🟠', name: 'GLM 4.5 Air', desc: 'Hybrid thinking modes', ctx: '131K', tools: 'Function Calling', modelId: 'z-ai/glm-4.5-air:free', type: 'chat', tags: ['thinking-modes', 'hybrid', 'chinese'], weakness: 'English performance may lag behind specialized models' },
+    { provider: 'openrouter', color: '🟠', name: 'Liquid LFM 1.2B Think', desc: 'Edge-device reasoning', ctx: '32K', tools: 'None', modelId: 'liquid/lfm-2.5-1.2b-thinking:free', type: 'chat', tags: ['edge', 'small', 'reasoning'], weakness: 'tiny context, limited capability' },
+    { provider: 'openrouter', color: '🟠', name: 'Liquid LFM 1.2B Fast', desc: 'On-device, edge inference', ctx: '32K', tools: 'None', modelId: 'liquid/lfm-2.5-1.2b-instruct:free', type: 'chat', tags: ['edge', 'small', 'fast'], weakness: 'tiny context, limited capability' },
+    { provider: 'openrouter', color: '🟠', name: 'Nemotron Nano 12B VL', desc: 'Vision+Docs model', ctx: '128K', tools: 'None', modelId: 'nvidia/nemotron-nano-12b-v2-vl:free', type: 'chat', vision: true, tags: ['vision', 'docs', 'ocr'], weakness: 'no tool support' },
+    { provider: 'google', color: '🔵', name: 'Gemini 3.5 Flash', desc: 'Latest — 30 RPM', ctx: '1M', tools: 'Function Calling', modelId: 'gemini-3.5-flash', type: 'chat', vision: true, tags: ['agentic', 'coding', 'multimodal', 'frontier'], weakness: 'paid tier — free quota limited to 30 RPM' },
+    { provider: 'google', color: '🔵', name: 'Gemini 3.1 Flash-Lite', desc: 'Budget — 30 RPM', ctx: '1M', tools: 'Function Calling', modelId: 'gemini-3.1-flash-lite', type: 'chat', vision: true, tags: ['budget', 'efficient', 'vision', 'fast'], weakness: 'less capable than full Flash models' },
+    { provider: 'google', color: '🔵', name: 'Gemini 2.5 Flash-Lite', desc: 'Fastest — 15 RPM', ctx: '1M', tools: 'Function Calling', modelId: 'gemini-2.5-flash-lite', type: 'chat', vision: true, tags: ['fastest', 'budget', 'vision'], weakness: 'older gen, reduced intelligence' },
+    { provider: 'nvidia', color: '🟣', name: 'Gemma 4 31B (NIM)', desc: 'TOP — Frontier Reasoning', ctx: '256K', tools: 'Function Calling', modelId: 'google/gemma-4-31b-it', type: 'chat', tags: ['reasoning', 'frontier', 'nim-deployed'], weakness: 'NVIDIA NIM may have separate pricing' },
+    { provider: 'nvidia', color: '🟣', name: 'Mistral Small 4 119B', desc: '18M calls/mo', ctx: '256K', tools: 'Function Calling', modelId: 'mistralai/mistral-small-4-119b-2603', type: 'chat', tags: ['popular', 'production', 'general-purpose'], weakness: 'large model, higher latency' },
+    { provider: 'nvidia', color: '🟣', name: 'Mistral Medium 3.5 128B', desc: 'Strong general-purpose', ctx: '256K', tools: 'Function Calling', modelId: 'mistralai/mistral-medium-3.5-128b', type: 'chat', tags: ['general-purpose', 'balanced', 'production'], weakness: 'medium — not best-in-class at any single task' },
+    { provider: 'nvidia', color: '🟣', name: 'MiniMax M2.7', desc: '230B MoE', ctx: '128K', tools: 'Function Calling', modelId: 'minimaxai/minimax-m2.7', type: 'chat', tags: ['moe', 'large', 'efficient'], weakness: 'less community testing vs Mistral/Llama' },
+    { provider: 'nvidia', color: '🟣', name: 'Kimi K2.6 (NIM)', desc: '256K ctx', ctx: '256K', tools: 'Function Calling', modelId: 'moonshotai/kimi-k2.6', type: 'chat', tags: ['long-context', 'agentic'], weakness: 'ecosystem less mature in English' },
+    { provider: 'nvidia', color: '🟣', name: 'Nemotron-3 Super (NIM)', desc: 'Agentic, multi-agent RL', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nemotron-3-super-120b-a12b', type: 'chat', tags: ['agentic', 'multi-agent', 'rl'], weakness: 'large, may be slow' },
+    { provider: 'nvidia', color: '🟣', name: 'Nemotron Nano Omni (NIM)', desc: 'Reasoning', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nvidia-nemotron-nano-9b-v2', type: 'chat', tags: ['reasoning', 'nano', 'efficient'], weakness: '9B — limited depth vs larger models' },
+    { provider: 'nvidia', color: '🟣', name: 'Nemotron Super 49B', desc: 'IS free', ctx: '128K', tools: 'Function Calling', modelId: 'nvidia/nemotron-nano-3-30b-a3b', type: 'chat', tags: ['free', 'mid-size', 'balanced'], weakness: 'modelId may differ from naming' },
+    { provider: 'nvidia', color: '🟣', name: 'Qwen3.5 122B', desc: 'New gen', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3.5-122b-a10b', type: 'chat', tags: ['new-gen', 'large', 'moe'], weakness: 'newly released — less battle-tested' },
+    { provider: 'nvidia', color: '🟣', name: 'Qwen3.5 397B', desc: 'Massive MoE', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3.5-397b-a17b', type: 'chat', tags: ['massive', 'moe', 'frontier'], weakness: 'very large — high latency, may hit rate limits' },
+    { provider: 'nvidia', color: '🟣', name: 'Qwen3 Next 80B', desc: 'Fast', ctx: '128K', tools: 'Function Calling', modelId: 'qwen/qwen3-next-80b-a3b-instruct', type: 'chat', tags: ['fast', 'moe', 'efficient'], weakness: 'less capable than full-size Qwen models' },
+    { provider: 'nvidia', color: '🟣', name: 'GLM 5.1', desc: 'Zhipu Latest', ctx: '128K', tools: 'Function Calling', modelId: 'z-ai/glm-5.1', type: 'chat', tags: ['chinese', 'latest', 'zhipu'], weakness: 'English performance may trail English-focused models' },
+    { provider: 'nvidia', color: '🟣', name: 'Seed OSS 36B', desc: 'ByteDance', ctx: '128K', tools: 'Function Calling', modelId: 'bytedance/seed-oss-36b-instruct', type: 'chat', tags: ['bytedance', 'open-weights', 'mid-size'], weakness: 'less community adoption than Mistral/Llama' }
+];
+// ============================================================
+// 4. CONSTANTS
+// ============================================================
+const HARDCODED_TOOLS = [
+    { type: 'function', function: { name: 'get_system_time', description: "Returns the user's local browser time, date, timezone, and Unix timestamp. No arguments needed.", parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'evaluate_math', description: 'Evaluates a mathematical expression safely. Use for arithmetic, percentages, and basic algebra. Pass a raw expression string.', parameters: { type: 'object', properties: { expression: { type: 'string', description: 'A math expression using +, -, *, /, %, parentheses, and decimals' } }, required: ['expression'] } } },
+    { type: 'function', function: { name: 'get_ui_state', description: 'Returns the current terminal state: active model name and provider, token usage, context window usage, message count, and tool support level.', parameters: { type: 'object', properties: {} } } },
+    { type: 'function', function: { name: 'web_search', description: 'Search the web for current information. Uses DuckDuckGo. Returns an abstract, related topics, and source URLs. Good for news, facts, and recent events.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'The search query string' } }, required: ['query'] } } }
+];
+const PROVIDER_ENDPOINTS = {
+    groq: 'https://api.groq.com/openai/v1/chat/completions',
+    openrouter: 'https://openrouter.ai/api/v1/chat/completions',
+    nvidia: 'https://integrate.api.nvidia.com/v1/chat/completions',
+};
+const DEFAULT_MODEL = { provider: 'groq', modelId: 'llama-3.3-70b-versatile' };
+const FALLBACK_CHAIN = [
+    { provider: 'groq', modelId: 'llama-3.3-70b-versatile' },
+    { provider: 'openrouter', modelId: 'meta-llama/llama-3.3-70b-instruct:free' },
+    { provider: 'google', modelId: 'gemini-3.5-flash' },
+    { provider: 'nvidia', modelId: 'google/gemma-4-31b-it' },
+];
+const MAX_HISTORY = 100;
+const MAX_TOOL_ITERATIONS = 5;
+const INPUT_MAX_HEIGHT = 350;
+const STORAGE_KEY_HISTORY = 'war_chest_history';
+const STORAGE_KEY_PROMPT = 'war_chest_prompt';
+const STORAGE_KEY_REFDOC = 'war_chest_ref_doc';
+const STORAGE_KEY_DRAFT = 'war_chest_draft';
+const STORAGE_KEY_ACTIVE_MODEL = 'war_chest_active_model';
+const SYSTEM_PROMPT = 'You are an elite tactical AI operating within the War Chest Command Center. Be concise, highly accurate, and structure outputs beautifully using markdown.';
+
+// ============================================================
+// 5. UTILITY FUNCTIONS
+// ============================================================
+function $(id) { return document.getElementById(id); }
+function parseCtx(ctxStr) {
+    if (!ctxStr || ctxStr === 'N/A') return Infinity;
+    const num = parseInt(ctxStr);
+    if (ctxStr.includes('M')) return num * 1024 * 1024;
+    if (ctxStr.includes('K')) return num * 1024;
+    return num;
+}
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+function formatTimestamp(date) {
+    const now = new Date();
+    const diff = now - date;
+    const day = 86400000;
+    if (diff < day && now.getDate() === date.getDate()) return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.getDate() === yesterday.getDate() && date.getMonth() === yesterday.getMonth() && date.getFullYear() === yesterday.getFullYear()) return 'Yesterday ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    if (diff < 7 * day) return date.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+function estimateTokens(history) {
+    let total = 0;
+    for (const msg of history) {
+        if (typeof msg.content === 'string') total += msg.content.length / 3.5;
+        else if (Array.isArray(msg.content)) for (const part of msg.content) { if (part.type === 'text') total += part.text.length / 3.5; if (part.type === 'image_url') total += 1000; }
+    }
+    return Math.ceil(total);
+}
+function hasImageContent(history) {
+    return history.some(msg => Array.isArray(msg.content) && msg.content.some(p => p.type === 'image_url'));
+}
+function parseApiError(status, body) {
+    try { const json = JSON.parse(body); if (json?.error?.message) return json.error.message; } catch (e) { }
+    const known = {
+        400: 'Bad request — check the model ID and request format.',
+        401: 'Unauthorized — your API key is invalid or missing.',
+        402: 'Payment required — the model is not free or your account has no credits.',
+        403: 'Forbidden — your API key lacks access to this model.',
+        404: 'Not found — the model endpoint does not exist.',
+        429: 'Rate limited — you are sending too many requests.',
+        500: 'Server error — the provider had an internal issue.',
+        503: 'Service unavailable — the provider is down for maintenance.',
+    };
+    return known[status] || 'HTTP ' + status + ': ' + (body || '').slice(0, 200);
+}
+
+function safeEval(expr) {
+    const tokens = [];
+    let i = 0;
+    while (i < expr.length) {
+        const ch = expr[i];
+        if (ch === ' ') { i++; continue; }
+        if ('+-*/.()%'.includes(ch)) { tokens.push(ch); i++; continue; }
+        if (ch >= '0' && ch <= '9') {
+            let num = '';
+            while (i < expr.length && ((expr[i] >= '0' && expr[i] <= '9') || expr[i] === '.')) { num += expr[i]; i++; }
+            tokens.push(parseFloat(num));
+            continue;
+        }
+        throw new Error('Unexpected character: ' + ch);
+    }
+    let pos = 0;
+    function peek() { return pos < tokens.length ? tokens[pos] : null; }
+    function consume() { return tokens[pos++]; }
+    function parseAddSub() {
+        let left = parseMulDiv();
+        while (peek() === '+' || peek() === '-') {
+            const op = consume();
+            const right = parseMulDiv();
+            left = op === '+' ? left + right : left - right;
+        }
+        return left;
+    }
+    function parseMulDiv() {
+        let left = parseUnary();
+        while (peek() === '*' || peek() === '/' || peek() === '%') {
+            const op = consume();
+            const right = parseUnary();
+            if (op === '*') left = left * right;
+            else if (op === '/') { if (right === 0) throw new Error('Division by zero'); left = left / right; }
+            else left = left % right;
+        }
+        return left;
+    }
+    function parseUnary() {
+        if (peek() === '-') { consume(); return -parseAtom(); }
+        if (peek() === '+') { consume(); return parseAtom(); }
+        return parseAtom();
+    }
+    function parseAtom() {
+        if (peek() === '(') { consume(); const val = parseAddSub(); if (peek() !== ')') throw new Error('Missing closing parenthesis'); consume(); return val; }
+        if (typeof peek() === 'number') return consume();
+        throw new Error('Expected number or (');
+    }
+    const result = parseAddSub();
+    if (pos < tokens.length) throw new Error('Unexpected token after expression');
+    if (typeof result !== 'number' || !isFinite(result)) throw new Error('Result is not finite');
+    return result;
+}
+
+function findModelItem(modelId, provider) {
+    const items = document.querySelectorAll('.model-item');
+    for (const item of items) {
+        if (item.dataset.modelId === modelId && item.dataset.provider === provider) return item;
+    }
+    return null;
+}
+// ============================================================
+// 6. STATE MANAGER — centralized store with lightweight pub/sub
+// ============================================================
+const StateManager = (() => {
+    const _state = {
+        selectedModel: null, conversationHistory: [], isStreaming: false,
+        abortController: null, pendingAttachment: null, validatedModels: {},
+        customModels: [], currentFilter: 'all', capabilityFilters: [], userPrompt: null, refDoc: null,
+        userScrolledAway: false, toolLoopIteration: 0, lastToolCallSig: null, lastToolCallRepeat: 0,
+        audioMuted: JSON.parse(localStorage.getItem('war_chest_audio_muted') || 'false'),
+    };
+    const _listeners = {};
+
+    function get(key) { return _state[key]; }
+    function set(key, val) { const prev = _state[key]; _state[key] = val; (_listeners[key] || []).forEach(fn => fn(val, prev)); }
+    function subscribe(key, fn) {
+        if (!_listeners[key]) _listeners[key] = [];
+        _listeners[key].push(fn);
+        return () => { const idx = _listeners[key].indexOf(fn); if (idx > -1) _listeners[key].splice(idx, 1); };
+    }
+    function getState() { return { ..._state }; }
+
+    function pushMessage(msg) { _state.conversationHistory.push(msg); }
+    function saveConversation() {
+        try {
+            const trimmed = _state.conversationHistory.slice(-MAX_HISTORY);
+            localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(trimmed));
+        } catch (e) {
+            try { const trimmed = _state.conversationHistory.slice(-50); localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(trimmed)); } catch (_) { }
+        }
+    }
+
+    function wipeAll() {
+        localStorage.removeItem('war_chest_keys');
+        localStorage.removeItem('war_chest_custom_models');
+        localStorage.removeItem('war_chest_validated');
+        localStorage.removeItem(STORAGE_KEY_HISTORY);
+        localStorage.removeItem(STORAGE_KEY_PROMPT);
+        localStorage.removeItem(STORAGE_KEY_REFDOC);
+        localStorage.removeItem(STORAGE_KEY_ACTIVE_MODEL);
+        localStorage.removeItem('war_chest_audio_muted');
+        try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (e) { }
+        Object.assign(_state, {
+            selectedModel: null, conversationHistory: [{ role: 'system', content: '' }], isStreaming: false,
+            abortController: null, pendingAttachment: null, validatedModels: {}, customModels: [],
+            currentFilter: 'all', userPrompt: null, refDoc: null, userScrolledAway: false,
+            audioMuted: false,
+        });
+        (_listeners['*'] || []).forEach(fn => fn(_state));
+    }
+
+    function trimHistoryForModel(modelCtxStr, reserveTokens) {
+        reserveTokens = reserveTokens || 2048;
+        const maxCtx = parseCtx(modelCtxStr);
+        if (maxCtx === Infinity) return 0;
+        const history = _state.conversationHistory;
+        const usedTokens = estimateTokens(history);
+        if (usedTokens + reserveTokens <= maxCtx) return 0;
+        const systemMsg = history[0];
+        const rest = history.slice(1);
+        const trimmed = [];
+        let runningTokens = estimateTokens([systemMsg]) + reserveTokens;
+        for (let i = rest.length - 1; i >= 0; i--) {
+            const msgTokens = estimateTokens([rest[i]]);
+            if (runningTokens + msgTokens <= maxCtx) { trimmed.unshift(rest[i]); runningTokens += msgTokens; } else break;
+        }
+        const dropped = rest.length - trimmed.length;
+        _state.conversationHistory = [systemMsg, ...trimmed];
+        return dropped;
+    }
+
+    function compiledPrompt() {
+        const base = (_state.userPrompt && _state.userPrompt.trim()) ? _state.userPrompt : SYSTEM_PROMPT;
+        if (_state.refDoc && _state.refDoc.content) return base + '\n\n---\nReference Document (' + _state.refDoc.name + '):\n' + _state.refDoc.content;
+        return base;
+    }
+
+    function recompileSystemMessage() {
+        const history = _state.conversationHistory;
+        if (history.length > 0 && history[0].role === 'system') history[0].content = compiledPrompt();
+        else history.unshift({ role: 'system', content: compiledPrompt() });
+    }
+
+    function setValidated(modelKey, valid) {
+        const validated = _state.validatedModels;
+        const [modelId, provider] = modelKey.split(':');
+        if (!validated[provider]) validated[provider] = [];
+        if (valid && !validated[provider].includes(modelId)) validated[provider].push(modelId);
+        else if (!valid) validated[provider] = validated[provider].filter(id => id !== modelId);
+    }
+
+    return { get, set, subscribe, getState, pushMessage, saveConversation, wipeAll, trimHistoryForModel, compiledPrompt, recompileSystemMessage, setValidated };
+})();
+// ============================================================
+// 7. DOM LAYER — all rendering, no business logic
+// ============================================================
+const DomLayer = (() => {
+    let _statusTimeoutId = null;
+
+    function updateTerminalStatus(state, detail) {
+        const el = document.getElementById('terminal-status');
+        if (!el) return;
+        const pulse = el.previousElementSibling;
+        if (_statusTimeoutId) { clearTimeout(_statusTimeoutId); _statusTimeoutId = null; }
+        switch (state) {
+            case 'standby':
+                el.textContent = '\u25BC ' + (StateManager.get('selectedModel') ? StateManager.get('selectedModel').name : 'AWAITING INPUT');
+                if (pulse) pulse.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+                break;
+            case 'streaming':
+                el.innerHTML = '\u25BC Receiving<span class="blink text-green-500 ml-1">\u2588</span>';
+                if (pulse) pulse.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+                break;
+            case 'info':
+                el.textContent = '\u25B8 ' + detail;
+                if (pulse) pulse.className = 'w-2 h-2 rounded-full bg-green-500 animate-pulse';
+                _statusTimeoutId = setTimeout(() => { if (document.getElementById('terminal-status') === el) updateTerminalStatus('standby'); _statusTimeoutId = null; }, 4000);
+                break;
+            case 'error':
+                el.textContent = '\u26A0 ' + detail;
+                if (pulse) pulse.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+                break;
+        }
+    }
+    function showInfoInStatus(message) { updateTerminalStatus('info', message); }
+    function updateSendStopButtons(streaming) {
+        const sendBtn = document.getElementById('send-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        if (!sendBtn || !stopBtn) return;
+        if (streaming) { sendBtn.classList.add('hidden'); stopBtn.classList.remove('hidden'); }
+        else { sendBtn.classList.remove('hidden'); stopBtn.classList.add('hidden'); }
+    }
+
+    function updateContextMeter() {
+        const model = StateManager.get('selectedModel');
+        const history = StateManager.get('conversationHistory');
+        const label = document.getElementById('context-meter-label');
+        const bar = document.getElementById('context-meter-bar');
+        const pct = document.getElementById('context-meter-pct');
+        if (!label || !bar || !pct || !model) return;
+        const maxCtx = parseCtx(model.ctx);
+        if (maxCtx === Infinity) { label.textContent = model.name; bar.style.width = '0%'; pct.textContent = '\u2014'; return; }
+        const used = estimateTokens(history);
+        const pctVal = Math.min(100, Math.round((used / maxCtx) * 100));
+        label.textContent = model.name;
+        bar.style.width = pctVal + '%';
+        bar.className = 'h-full transition-all duration-500 ease-out rounded-full ' + (pctVal < 60 ? 'bg-green-500' : pctVal < 80 ? 'bg-yellow-500' : 'bg-red-500');
+        pct.textContent = pctVal + '%';
+    }
+
+    function updateActiveModelBar(model) {
+        const bar = document.getElementById('active-model-bar');
+        const nameEl = document.getElementById('active-model-name');
+        const extraEl = document.getElementById('active-model-extra');
+        const indicator = document.getElementById('active-model-indicator');
+        const indicatorName = document.getElementById('active-model-indicator-name');
+        if (!bar || !nameEl || !extraEl || !indicator || !indicatorName) return;
+        if (!model) { bar.classList.add('hidden'); indicator.classList.add('hidden'); return; }
+        bar.classList.remove('hidden');
+        nameEl.textContent = model.name;
+        const toolEmoji = model.tools === 'Function Calling' ? ' \uD83D\uDD2D' : model.tools === 'Built-in Tools' ? ' \u2699\uFE0F' : '';
+        extraEl.textContent = '\u00B7 ' + model.provider + ' \u00B7 ' + (model.ctx || '?') + toolEmoji;
+        indicator.classList.remove('hidden');
+        indicatorName.textContent = model.name;
+    }
+
+    function showToast(type, message) {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = 'toast ' + type;
+        const icons = { success: '\u2713', error: '\u2717', warning: '\u26A0', info: '\u2139' };
+        toast.innerHTML = '<span class="font-bold mr-1.5">' + (icons[type] || '\u2139') + '</span>' + message;
+        container.appendChild(toast);
+        requestAnimationFrame(() => toast.classList.add('show'));
+        setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 4000);
+    }
+
+    function renderModelList() {
+        const list = document.getElementById('model-list');
+        if (!list) return;
+        list.innerHTML = '';
+        const customModels = StateManager.get('customModels');
+        const validatedModels = StateManager.get('validatedModels');
+        const selectedModel = StateManager.get('selectedModel');
+        const currentFilter = StateManager.get('currentFilter');
+        const capFilters = StateManager.get('capabilityFilters') || [];
+        const all = [...models, ...customModels];
+        let filtered = currentFilter === 'all' ? all : all.filter(m => m.provider === currentFilter);
+        if (capFilters.length) {
+            filtered = filtered.filter(m => {
+                return capFilters.every(cf => {
+                    if (cf === 'vision') return m.vision === true;
+                    if (cf === 'tools') return m.tools && m.tools !== 'None';
+                    if (cf === 'fast') return m.tags && m.tags.some(t => ['fast', 'fastest', 'fast-inference', 'speed', 'high-throughput'].includes(t));
+                    return true;
+                });
+            });
+        }
+        filtered.forEach(model => {
+            const isCustom = model.custom;
+            const isVerified = validatedModels[model.provider]?.includes(model.modelId);
+            const isSelected = selectedModel && selectedModel.modelId === model.modelId && selectedModel.provider === model.provider;
+            const div = document.createElement('div');
+            div.className = 'model-item p-2.5 rounded cursor-pointer flex items-start gap-3 text-xs';
+            div.dataset.modelId = model.modelId;
+            div.dataset.provider = model.provider;
+            div.dataset.customDelete = isCustom ? '1' : '';
+            div.setAttribute('role', 'option');
+            div.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+            if (!isVerified && Object.keys(validatedModels).length > 0) div.classList.add('opacity-50');
+            if (isSelected) div.classList.add('active');
+            const toolIcon = model.tools === 'Function Calling' ? '<span class="text-[8px] text-green-500/60" title="Function Calling">\uD83D\uDD2D</span>' : model.tools === 'Built-in Tools' ? '<span class="text-[8px] text-cyan-500/60" title="Built-in Tools">\u2699\uFE0F</span>' : '';
+            const tagsHtml = model.tags ? model.tags.slice(0, 3).map(t => '<span class="inline-block text-[7px] px-1 py-0.5 rounded bg-gray-800/60 border border-gray-700/50 text-gray-500 leading-none">' + escapeHtml(t) + '</span>').join('') : '';
+            div.innerHTML = '<span class="mt-0.5 text-sm">' + model.color + '</span><div class="flex-1 min-w-0"><div class="font-bold ' + (isCustom ? 'text-blue-300' : 'text-gray-200') + ' truncate flex items-center gap-2">' + escapeHtml(model.name) + ' ' + toolIcon + (!isVerified && Object.keys(validatedModels).length > 0 ? '<span class="text-[8px] text-yellow-500 border border-yellow-500/30 px-1 rounded">UNVERIFIED</span>' : '') + (isCustom ? '<span class="text-[8px] text-blue-400 border border-blue-400/30 px-1 rounded">CUSTOM</span>' : '') + '</div><div class="text-gray-500 text-[10px] truncate">' + escapeHtml(model.desc) + '</div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-1">' + tagsHtml + '</div>' : '') + '</div>' + (isCustom ? '<button class="custom-delete-btn text-red-400 hover:text-red-300 text-xs px-1">&times;</button>' : '');
+            div.onclick = (e) => { if (e.target.closest('.custom-delete-btn')) return; App.selectModel(model); };
+            list.appendChild(div);
+        });
+    }
+
+    function updateModelProfile(model) {
+        const profile = document.getElementById('model-profile');
+        if (!profile) return;
+        if (!model) { profile.innerHTML = 'Select a model from the fleet to view detailed telemetry and capabilities...'; return; }
+        const tagsHtml = model.tags && model.tags.length ? model.tags.map(t => '<span class="tag-pill inline-block text-[9px] px-1.5 py-0.5 rounded bg-green-900/20 border border-green-500/20 text-green-400 leading-none mr-1 mb-1">' + escapeHtml(t) + '</span>').join('') : '';
+        const weaknessHtml = model.weakness ? '<div class="mt-2 p-2 bg-red-900/10 rounded border border-red-500/15 text-red-400/80 text-[10px]">\u26A0 ' + escapeHtml(model.weakness) + '</div>' : '';
+        if (model.type !== 'chat') {
+            profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Type</span><span class="text-yellow-400 font-bold uppercase">' + escapeHtml(model.type) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div>' + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2">' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-3 p-3 bg-yellow-900/20 rounded border border-yellow-500/30 text-yellow-400 text-[11px]">\u26A0\uFE0F This is a ' + model.type.toUpperCase() + '-only model. Select a chat model for conversation.</div></div>';
+            return;
+        }
+        const toolLabel = model.tools === 'Function Calling' ? 'Function Calling' : model.tools === 'Built-in Tools' ? 'Built-in Tools' : model.tools || 'None';
+        const toolColor = model.tools === 'Function Calling' || model.tools === 'Built-in Tools' ? 'text-green-400' : 'text-red-400';
+        let builtInHtml = '';
+        if (model.builtInTools && model.builtInTools.length) builtInHtml = '<div class="mt-1 flex flex-wrap gap-1">' + model.builtInTools.map(t => '<span class="text-[8px] px-1 py-0.5 rounded bg-green-900/15 border border-green-500/20 text-green-400/70">\u2699 ' + escapeHtml(t) + '</span>').join('') + '</div>';
+        let localToolsHtml = '';
+        if (model.tools === 'Function Calling' && HARDCODED_TOOLS.length) localToolsHtml = '<div class="mt-1 text-[9px] text-gray-500">\uD83D\uDCBB Local: ' + HARDCODED_TOOLS.map(t => '<span class="text-gray-400">' + escapeHtml(t.function.name) + '</span>').join(', ') + '</div>';
+        profile.innerHTML = '<div class="space-y-2 animate-[fadeIn_0.2s_ease-in-out]"><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Provider</span><span class="text-white font-bold uppercase">' + escapeHtml(model.provider) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Model ID</span><span class="text-green-400 font-mono text-[10px]">' + escapeHtml(model.modelId) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Context</span><span class="text-white font-bold">' + escapeHtml(model.ctx) + '</span></div><div class="flex justify-between border-b border-gray-800 pb-1"><span class="text-gray-500">Tools</span><span class="' + toolColor + ' font-bold">' + toolLabel + '</span></div>' + builtInHtml + localToolsHtml + (tagsHtml ? '<div class="flex flex-wrap gap-1 mt-2 border-t border-gray-800 pt-2"><span class="text-[9px] text-gray-500 uppercase tracking-wider w-full mb-1">Excels at</span>' + tagsHtml + '</div>' : '') + weaknessHtml + '<div class="mt-2 p-2 bg-black/30 rounded border border-gray-800/50 text-gray-400 italic text-[11px]">"' + escapeHtml(model.desc) + '"</div></div>';
+    }
+    function _buildUserMessageElement(text, attachment, onDelete) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-container relative group';
+        const div = document.createElement('div');
+        div.className = 'text-white font-mono text-sm border-l-2 border-transparent pl-2 hover:border-gray-700 transition-colors mb-1 pr-8';
+        const attachHtml = attachment ? ' <span class="text-blue-400">[\uD83D\uDCF7 ' + escapeHtml(attachment.name || 'image') + ']</span>' : '';
+        div.innerHTML = '<span class="text-gray-500">USER:</span> ' + escapeHtml(text) + attachHtml;
+        wrapper.appendChild(div);
+        const ts = document.createElement('div');
+        ts.className = 'msg-timestamp text-gray-600';
+        ts.textContent = formatTimestamp(new Date());
+        div.appendChild(ts);
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'msg-action absolute top-0 right-6 text-[10px] text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
+        copyBtn.textContent = '\u29C9';
+        copyBtn.title = 'Copy';
+        copyBtn.onclick = () => { const t = div.cloneNode(true).textContent.replace(ts.textContent, '').trim(); navigator.clipboard.writeText(t).catch(() => {}); copyBtn.textContent = '\u2713'; setTimeout(() => { copyBtn.textContent = '\u29C9'; }, 1000); };
+        wrapper.appendChild(copyBtn);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'msg-action absolute top-0 right-0 text-[10px] text-gray-600 hover:text-red-400 px-1 py-0.5 rounded';
+        delBtn.textContent = '\u00D7';
+        delBtn.title = 'Delete';
+        delBtn.onclick = onDelete || (() => wrapper.remove());
+        wrapper.appendChild(delBtn);
+        return wrapper;
+    }
+
+    function addUserMessage(text, attachment) {
+        const wrapper = _buildUserMessageElement(text, attachment);
+        document.getElementById('terminal-output').appendChild(wrapper);
+        document.getElementById('terminal-output').scrollTop = document.getElementById('terminal-output').scrollHeight;
+    }
+
+    function createResponseContainer() {
+        const terminal = document.getElementById('terminal-output');
+        const div = document.createElement('div');
+        div.className = 'msg-container relative group font-mono text-sm border-l-2 border-transparent pl-2 hover:border-gray-700 transition-colors mb-3 pr-8';
+        const model = StateManager.get('selectedModel');
+        const modelName = model ? ' ' + model.name : '';
+        div.innerHTML = '<span class="text-green-500">AI' + escapeHtml(modelName) + ':</span> <div class="text-green-400 markdown-body"></div><div class="image-gallery flex flex-wrap gap-2 mt-2"></div>';
+        const ts = document.createElement('div');
+        ts.className = 'msg-timestamp text-gray-600';
+        ts.textContent = formatTimestamp(new Date());
+        div.appendChild(ts);
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'msg-action absolute top-0 right-6 text-[11px] text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
+        copyBtn.textContent = '\u29C9';
+        copyBtn.title = 'Copy response';
+        copyBtn.onclick = () => { const t = div.querySelector('.markdown-body').textContent; navigator.clipboard.writeText(t).catch(() => {}); copyBtn.textContent = '\u2713'; copyBtn.classList.add('text-green-400'); setTimeout(() => { copyBtn.textContent = '\u29C9'; copyBtn.classList.remove('text-green-400'); }, 1500); };
+        div.appendChild(copyBtn);
+        const regenBtn = document.createElement('button');
+        regenBtn.className = 'msg-action absolute top-0 right-12 text-[11px] text-gray-600 hover:text-cyan-400 px-1 py-0.5 rounded';
+        regenBtn.textContent = '\u21BB';
+        regenBtn.title = 'Regenerate response';
+        regenBtn.onclick = () => { if (!StateManager.get('isStreaming')) App.regenerateResponse(div); };
+        div.appendChild(regenBtn);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'msg-action absolute top-0 right-0 text-[11px] text-gray-600 hover:text-red-400 px-1 py-0.5 rounded';
+        delBtn.textContent = '\u00D7';
+        delBtn.title = 'Delete response';
+        delBtn.onclick = () => {
+            const containers = document.querySelectorAll('#terminal-output .msg-container');
+            let idx = -1;
+            containers.forEach((c, i) => { if (c === div) idx = i; });
+            const respIdx = (idx >= 0) ? idx * 2 + 1 : -1;
+            if (respIdx > 0 && respIdx < StateManager.get('conversationHistory').length) {
+                const h = StateManager.get('conversationHistory');
+                h.splice(respIdx - 1, 2);
+            }
+            const prev = div.previousElementSibling;
+            if (prev && prev.classList.contains('msg-container')) prev.remove();
+            div.remove();
+            StateManager.saveConversation();
+        };
+        div.appendChild(delBtn);
+        const textContainer = div.querySelector('.markdown-body');
+        const gallery = div.querySelector('.image-gallery');
+        terminal.appendChild(div);
+        terminal.scrollTop = terminal.scrollHeight;
+        return { textContainer, gallery, element: div };
+    }
+
+    function updateStreamText(container, text) {
+        if (!container) return;
+        container.innerHTML = escapeHtml(text) + '<span class="stream-cursor blink text-green-500 ml-px">\u2588</span>';
+    }
+
+    function finalizeResponseDOM(container, markdownText) {
+        if (!container) return;
+        const cursorSpan = container.querySelector('.stream-cursor');
+        if (cursorSpan) cursorSpan.remove();
+        if (markdownText && typeof marked !== 'undefined') {
+            const raw = marked.parse(markdownText);
+            container.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(raw) : raw;
+        }
+    }
+
+    function updateTimestamp(element, latency, aborted) {
+        if (!element) return;
+        const tsEl = element.querySelector('.msg-timestamp');
+        if (tsEl && !aborted) tsEl.textContent = formatTimestamp(new Date()) + ' \u00B7 ' + latency + 'ms';
+    }
+
+    function updateLatency(latency) {
+        const el = document.getElementById('last-latency');
+        if (el) el.innerText = latency + 'ms';
+    }
+
+    function showError(msg, showRetry) {
+        playSound('error');
+        updateTerminalStatus('error', msg);
+        const terminal = document.getElementById('terminal-output');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'msg-container relative group';
+        const div = document.createElement('div');
+        div.className = 'text-red-400 font-mono text-sm border-l-2 border-red-500/30 pl-2 mb-1';
+        div.innerHTML = '<span class="text-red-500">ERROR:</span> ' + escapeHtml(msg);
+        wrapper.appendChild(div);
+        if (showRetry) {
+            const retryBtn = document.createElement('button');
+            retryBtn.className = 'retry-btn text-[10px] text-gray-500 hover:text-green-400 border border-gray-700 hover:border-green-500/50 rounded px-2 py-0.5 ml-2 mb-2 transition-all';
+            retryBtn.textContent = '\u21BB Retry';
+            retryBtn.onclick = () => { if (StateManager.get('isStreaming')) return; wrapper.remove(); App.sendMessage(); };
+            wrapper.appendChild(retryBtn);
+        }
+        terminal.appendChild(wrapper);
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function renderToolCallCard(toolCalls, results) {
+        const terminal = document.getElementById('terminal-output');
+        const card = document.createElement('div');
+        card.className = 'msg-container font-mono text-xs border border-green-500/20 rounded-lg p-3 mb-3 bg-gray-900/40';
+        let html = '<div class="text-green-400 font-bold mb-2 flex items-center gap-2">\u2699\uFE0F Tool Execution</div>';
+        for (let i = 0; i < toolCalls.length; i++) {
+            const tc = toolCalls[i], r = results[i], name = tc.function?.name || 'unknown';
+            let argsDisp, resDisp;
+            try { argsDisp = JSON.stringify(JSON.parse(tc.function?.arguments || '{}'), null, 2); } catch (e) { argsDisp = tc.function?.arguments || '{}'; }
+            try { resDisp = typeof r.content === 'string' ? r.content : JSON.stringify(JSON.parse(r.content), null, 2); } catch (e) { resDisp = String(r.content); }
+            const isErr = resDisp.includes('"error"');
+            html += '<div class="mb-2 p-2 bg-black/30 rounded border border-gray-800"><div class="text-cyan-400 font-bold mb-1">\u25B8 ' + escapeHtml(name) + '</div><details class="text-gray-400"><summary class="cursor-pointer text-gray-500 hover:text-gray-300 text-[10px]">Arguments</summary><pre class="mt-1 text-[10px] text-gray-500 overflow-x-auto">' + escapeHtml(argsDisp) + '</pre></details><div class="mt-1 text-gray-300 text-[10px]"><span class="text-gray-500">Result:</span> <span class="' + (isErr ? 'text-red-400' : 'text-green-400') + ' whitespace-pre-wrap">' + escapeHtml(resDisp) + '</span></div></div>';
+        }
+        card.innerHTML = html;
+        terminal.appendChild(card);
+        terminal.scrollTop = terminal.scrollHeight;
+        playSound('deploy');
+    }
+
+    function archiveMessages(activeCount) {
+        const containers = document.querySelectorAll('#terminal-output .msg-container');
+        let count = 0;
+        containers.forEach(el => { if (count < activeCount) count++; else el.classList.add('msg-archived'); });
+    }
+
+    function addHorizonBanner() {
+        const terminal = document.getElementById('terminal-output');
+        const horizon = document.createElement('div');
+        horizon.className = 'context-horizon';
+        horizon.textContent = '--- [ CONTEXT HORIZON: OLDER MESSAGES ARCHIVED ] ---';
+        const firstActive = terminal.querySelector('.msg-container:not(.msg-archived)');
+        if (firstActive) terminal.insertBefore(horizon, firstActive);
+        else terminal.appendChild(horizon);
+    }
+
+    function displayImages(container, images) {
+        if (!container) return;
+        container.innerHTML = '';
+        for (const img of images) {
+            const src = 'data:' + img.mime + ';base64,' + img.data;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'relative group inline-block cursor-pointer';
+            const thumb = document.createElement('img');
+            thumb.className = 'w-32 h-32 object-cover rounded border border-gray-700 hover:border-green-500/50 transition-all';
+            thumb.src = src;
+            thumb.onclick = () => showImageLightbox(src);
+            wrapper.appendChild(thumb);
+            const dl = document.createElement('button');
+            dl.className = 'absolute top-1 right-1 bg-black/70 hover:bg-black text-white text-xs px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity leading-none';
+            dl.textContent = '\u2B07';
+            dl.onclick = (e) => { e.stopPropagation(); downloadImage(src, img.mime); };
+            wrapper.appendChild(dl);
+            container.appendChild(wrapper);
+        }
+        if (images.length > 0) {
+            const badge = document.createElement('div');
+            badge.className = 'text-[10px] text-gray-500 mt-1';
+            badge.textContent = images.length + ' image' + (images.length > 1 ? 's' : '') + ' generated';
+            container.appendChild(badge);
+        }
+    }
+
+    function showImageLightbox(src) {
+        const overlay = document.createElement('div');
+        overlay.className = 'fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4 cursor-pointer';
+        overlay.onclick = () => overlay.remove();
+        const img = document.createElement('img');
+        img.className = 'max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl';
+        img.src = src;
+        overlay.appendChild(img);
+        document.body.appendChild(overlay);
+    }
+
+    function downloadImage(src, mime) {
+        const ext = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[mime] || 'png';
+        const a = document.createElement('a'); a.href = src; a.download = 'ai-image-' + Date.now() + '.' + ext;
+        document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    function renderConversation() {
+        const terminal = document.getElementById('terminal-output');
+        if (!terminal) return;
+        const defaultMsg = terminal.querySelector('.text-gray-400');
+        if (defaultMsg) defaultMsg.remove();
+        const history = StateManager.get('conversationHistory');
+        for (let i = 0; i < history.length; i++) {
+            const msg = history[i];
+            if (msg.role === 'system') continue;
+            if (msg.role === 'user') {
+                let text = '', attachment = null;
+                if (typeof msg.content === 'string') text = msg.content;
+                else if (Array.isArray(msg.content)) for (const part of msg.content) { if (part.type === 'text') text = part.text; else if (part.type === 'image_url') attachment = { name: 'image' }; }
+                terminal.appendChild(_buildUserMessageElement(text, attachment));
+            } else if (msg.role === 'assistant') {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'msg-container relative group font-mono text-sm border-l-2 border-transparent pl-2 hover:border-gray-700 transition-colors mb-3 pr-8';
+                wrapper.innerHTML = '<span class="text-green-500">AI:</span> <div class="text-green-400 markdown-body"></div><div class="image-gallery flex flex-wrap gap-2 mt-2"></div>';
+                const ts = document.createElement('div');
+                ts.className = 'msg-timestamp text-gray-600';
+                ts.textContent = formatTimestamp(new Date());
+                wrapper.appendChild(ts);
+                const copyBtn = document.createElement('button');
+                copyBtn.className = 'msg-action absolute top-0 right-6 text-[11px] text-gray-600 hover:text-green-400 px-1 py-0.5 rounded';
+                copyBtn.textContent = '\u29C9';
+                copyBtn.title = 'Copy response';
+                copyBtn.onclick = () => { const t = wrapper.querySelector('.markdown-body').textContent; navigator.clipboard.writeText(t).catch(() => {}); copyBtn.textContent = '\u2713'; copyBtn.classList.add('text-green-400'); setTimeout(() => { copyBtn.textContent = '\u29C9'; copyBtn.classList.remove('text-green-400'); }, 1500); };
+                wrapper.appendChild(copyBtn);
+                const regenBtn = document.createElement('button');
+                regenBtn.className = 'msg-action absolute top-0 right-12 text-[11px] text-gray-600 hover:text-cyan-400 px-1 py-0.5 rounded';
+                regenBtn.textContent = '\u21BB';
+                regenBtn.title = 'Regenerate response';
+                regenBtn.onclick = () => { if (!StateManager.get('isStreaming')) App.regenerateResponse(wrapper); };
+                wrapper.appendChild(regenBtn);
+                const delBtn = document.createElement('button');
+                delBtn.className = 'msg-action absolute top-0 right-0 text-[11px] text-gray-600 hover:text-red-400 px-1 py-0.5 rounded';
+                delBtn.textContent = '\u00D7';
+                delBtn.title = 'Delete response';
+                delBtn.onclick = () => {
+                    const containers = document.querySelectorAll('#terminal-output .msg-container');
+                    let idx = -1;
+                    containers.forEach((c, i) => { if (c === wrapper) idx = i; });
+                    const respIdx = (idx >= 0) ? idx * 2 + 1 : -1;
+                    if (respIdx > 0 && respIdx < StateManager.get('conversationHistory').length) {
+                        const h = StateManager.get('conversationHistory');
+                        h.splice(respIdx - 1, 2);
+                    }
+                    const prev = wrapper.previousElementSibling;
+                    if (prev && prev.classList.contains('msg-container')) prev.remove();
+                    wrapper.remove();
+                    StateManager.saveConversation();
+                };
+                wrapper.appendChild(delBtn);
+                const tc = wrapper.querySelector('.markdown-body');
+                if (typeof msg.content === 'string' && msg.content) {
+                    if (typeof marked !== 'undefined') {
+                        const raw = marked.parse(msg.content);
+                        tc.innerHTML = typeof DOMPurify !== 'undefined' ? DOMPurify.sanitize(raw) : raw;
+                    } else tc.textContent = msg.content;
+                }
+                terminal.appendChild(wrapper);
+            }
+        }
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function showAttachmentPreview(fileName, dataUrl) {
+        const preview = document.getElementById('attachment-preview');
+        const thumb = document.getElementById('attach-thumb');
+        const name = document.getElementById('attach-name');
+        if (!preview || !thumb || !name) return;
+        thumb.src = dataUrl;
+        name.textContent = fileName;
+        preview.classList.remove('hidden');
+    }
+
+    function removeAttachmentPreview() {
+        const preview = document.getElementById('attachment-preview');
+        if (preview) preview.classList.add('hidden');
+    }
+
+    function syncFleetSelection(model) {
+        document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
+        const match = findModelItem(model.modelId, model.provider);
+        if (match) match.classList.add('active');
+        updateModelProfile(model);
+    }
+
+    function updatePromptCharCount() {
+        const editor = document.getElementById('prompt-editor');
+        const chars = document.getElementById('prompt-chars');
+        if (editor && chars) chars.textContent = editor.value.length + 'c';
+    }
+
+    function updateDocUI() {
+        const refDoc = StateManager.get('refDoc');
+        const emptyState = document.getElementById('doc-empty-state');
+        const loadedState = document.getElementById('doc-loaded-state');
+        if (!emptyState || !loadedState) return;
+        if (refDoc) {
+            emptyState.classList.add('hidden');
+            loadedState.classList.remove('hidden');
+            document.getElementById('doc-filename').textContent = refDoc.name;
+            document.getElementById('doc-filesize').textContent = (refDoc.size / 1024).toFixed(0) + 'KB';
+        } else { emptyState.classList.remove('hidden'); loadedState.classList.add('hidden'); }
+    }
+
+    function updateSessionStats() {
+        const history = StateManager.get('conversationHistory');
+        const countEl = document.getElementById('msg-count');
+        if (countEl) countEl.innerText = history.filter(m => m.role !== 'system').length;
+    }
+
+    function scrollToBottom() {
+        const el = document.getElementById('terminal-output');
+        if (el) el.scrollTop = el.scrollHeight;
+        StateManager.set('userScrolledAway', false);
+    }
+
+    function toggleVault() {
+        const modal = document.getElementById('vault-modal');
+        if (modal) modal.classList.toggle('hidden');
+        playSound('toggle');
+    }
+
+    function updateTokenFlow(tokensPerSec, totalTokens, elapsed) {
+        const el = document.getElementById('token-flow');
+        if (!el) return;
+        if (tokensPerSec == null) {
+            el.innerHTML = '';
+            return;
+        }
+        el.innerHTML = '<span class="text-[10px] text-green-400 font-mono font-bold tracking-wider">\u25B8 '
+            + tokensPerSec.toFixed(0) + ' t/s  \u00B7 ' + (totalTokens || 0).toLocaleString() + ' tok  \u00B7 '
+            + elapsed.toFixed(1) + 's</span>';
+    }
+
+    return {
+        updateTerminalStatus, showInfoInStatus, updateSendStopButtons, updateContextMeter,
+        updateActiveModelBar, showToast, renderModelList, updateModelProfile,
+        addUserMessage, createResponseContainer, updateStreamText, finalizeResponse: finalizeResponseDOM,
+        updateTimestamp, updateLatency, showError, renderToolCallCard,
+        archiveMessages, addHorizonBanner, displayImages, showImageLightbox, downloadImage,
+        updatePromptCharCount, updateDocUI, updateSessionStats, scrollToBottom, toggleVault,
+        renderConversation, showAttachmentPreview, removeAttachmentPreview, syncFleetSelection,
+        updateTokenFlow,
+    };
+})();
+// ============================================================
+// 8. TOOL EXECUTOR — local tool functions + agentic loop
+// ============================================================
+const ToolExecutor = (() => {
+    function getSystemTime() {
+        const now = new Date();
+        return { iso: now.toISOString(), local: now.toLocaleString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, unix_ms: now.getTime() };
+    }
+    function evaluateMath(argsStr) {
+        let args;
+        try { args = JSON.parse(argsStr); } catch (e) { return { error: 'Invalid JSON in arguments' }; }
+        const expr = (args.expression || '').trim();
+        if (!expr) return { error: 'No expression provided' };
+        try { return { expression: expr, result: safeEval(expr) }; }
+        catch (e) { return { error: 'Evaluation error: ' + e.message }; }
+    }
+    function getUiState() {
+        const model = StateManager.get('selectedModel');
+        const history = StateManager.get('conversationHistory');
+        const tokens = estimateTokens(history);
+        const ctx = model ? parseCtx(model.ctx) : null;
+        return {
+            activeModel: model ? { name: model.name, provider: model.provider } : null,
+            tokenUsage: tokens,
+            contextWindow: ctx,
+            contextPercent: ctx ? Math.min(100, Math.round((tokens / ctx) * 100)) : 0,
+            messageCount: history.filter(m => m.role !== 'system').length,
+            toolSupport: model?.tools || 'None'
+        };
+    }
+    async function webSearch(argsStr) {
+        let args;
+        try { args = JSON.parse(argsStr); } catch (e) { return { error: 'Invalid JSON in arguments' }; }
+        const query = (args.query || '').trim();
+        if (!query) return { error: 'No search query provided' };
+        try {
+            const url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(query) + '&format=json&no_html=1';
+            const res = await fetch(url);
+            if (!res.ok) return { error: 'Search failed: HTTP ' + res.status };
+            const data = await res.json();
+            const result = { query, source: 'DuckDuckGo' };
+            if (data.AbstractText) result.abstract = data.AbstractText;
+            if (data.AbstractSource) result.source = data.AbstractSource;
+            if (data.AbstractURL) result.url = data.AbstractURL;
+            if (data.RelatedTopics && data.RelatedTopics.length) {
+                result.related = data.RelatedTopics.slice(0, 5).map(t => {
+                    if (t.Text) return t.Text;
+                    if (t.Topics) return t.Topics.slice(0, 3).map(st => st.Text).join('; ');
+                    return '';
+                }).filter(Boolean);
+            }
+            if (data.Results && data.Results.length) {
+                result.results = data.Results.slice(0, 5).map(r => ({ title: r.Text, url: r.FirstURL }));
+            }
+            if (!result.abstract && !result.related && !result.results) {
+                result.note = 'No instant answer found for this query. Try a different search term.';
+            }
+            return result;
+        } catch (err) {
+            return { error: 'Search error: ' + err.message };
+        }
+    }
+    async function execute(toolCalls, history) {
+        const results = [];
+        let abortLoop = false;
+        for (const tc of toolCalls) {
+            const name = tc.function?.name || '';
+            const argsStr = tc.function?.arguments || '{}';
+            const sig = name + ':' + argsStr;
+            const lastSig = StateManager.get('lastToolCallSig');
+            let repeat = StateManager.get('lastToolCallRepeat');
+            if (sig === lastSig) {
+                repeat++;
+                StateManager.set('lastToolCallRepeat', repeat);
+                if (repeat >= 2) {
+                    results.push({ tool_call_id: tc.id, name, content: JSON.stringify({ error: 'Tool [' + name + '] failed identically twice. Aborting tool loop.' }) });
+                    abortLoop = true; break;
+                }
+            } else { StateManager.set('lastToolCallSig', sig); StateManager.set('lastToolCallRepeat', 1); }
+            let result;
+            switch (name) {
+                case 'get_system_time': result = getSystemTime(); break;
+                case 'evaluate_math': result = evaluateMath(argsStr); break;
+                case 'get_ui_state': result = getUiState(); break;
+                case 'web_search': result = await webSearch(argsStr); break;
+                default: result = { error: 'Unknown tool "' + escapeHtml(name) + '". Available tools: get_system_time, evaluate_math, get_ui_state, web_search' };
+            }
+            results.push({ tool_call_id: tc.id, name, content: JSON.stringify(result) });
+        }
+        return { results, abortLoop };
+    }
+    return { execute };
+})();
+
+// ============================================================
+// 9. API LAYER — network streaming, SSE parsing, failover
+// ============================================================
+const ApiLayer = (() => {
+    function parseSSE(buffer) {
+        const lines = buffer.split('\n');
+        const rest = lines.pop() || '';
+        const events = [];
+        for (const line of lines) {
+            if (line.startsWith('data: ')) {
+                const data = line.slice(6).trim();
+                if (data && data !== '[DONE]') { try { events.push(JSON.parse(data)); } catch (e) { } }
+            }
+        }
+        return { rest, events };
+    }
+    function extractOpenAIChunk(parsed) {
+        const delta = parsed?.choices?.[0]?.delta || parsed?.choices?.[0] || {};
+        return { text: delta.content || delta.text || '', toolCalls: delta.tool_calls || null };
+    }
+    function toGoogleParts(content) {
+        if (typeof content === 'string') return [{ text: content }];
+        return content.map(part => {
+            if (part.type === 'text') return { text: part.text };
+            if (part.type === 'image_url') {
+                const data = part.image_url.url;
+                const mime = data.split(';')[0].split(':')[1] || 'image/png';
+                return { inline_data: { mime_type: mime, data: data.split(',')[1] } };
+            }
+            return { text: '' };
+        });
+    }
+    const FETCH_TIMEOUT = 30000;
+    async function streamOpenAI(endpoint, apiKey, modelId, messages, callbacks, signal, tools) {
+        const { onToken, onDone, onError } = callbacks;
+        let watchdog = null;
+        try {
+            const body = { model: modelId, messages, stream: true };
+            if (tools && tools.length) { body.tools = tools; body.tool_choice = 'auto'; }
+            const fetchPromise = fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + apiKey, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body), signal,
+            });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timed out after ' + (FETCH_TIMEOUT / 1000) + 's')), FETCH_TIMEOUT));
+            const res = await Promise.race([fetchPromise, timeoutPromise]);
+            if (!res.ok) { const b = await res.text(); onError(parseApiError(res.status, b)); return; }
+            let lastChunkTime = Date.now();
+            watchdog = setInterval(() => {
+                if (Date.now() - lastChunkTime > 15000) {
+                    onError('Stream timed out after 15s of no data');
+                }
+            }, 2000);
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let full = '', buf = '', toolAccum = [], isToolStream = false;
+            while (true) {
+                const readPromise = reader.read();
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Chunk timeout')), 15000));
+                const { done, value } = await Promise.race([readPromise, timeoutPromise]);
+                if (done) break;
+                lastChunkTime = Date.now();
+                buf += decoder.decode(value, { stream: true });
+                const { rest, events } = parseSSE(buf);
+                buf = rest;
+                for (const ev of events) {
+                    const { text, toolCalls } = extractOpenAIChunk(ev);
+                    if (toolCalls) {
+                        if (!isToolStream) { isToolStream = true; if (callbacks.onToolStart) callbacks.onToolStart(); }
+                        for (const tc of toolCalls) {
+                            const idx = tc.index;
+                            if (!toolAccum[idx]) toolAccum[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+                            if (tc.id) toolAccum[idx].id = tc.id;
+                            if (tc.function?.name) toolAccum[idx].function.name = tc.function.name;
+                            if (tc.function?.arguments) toolAccum[idx].function.arguments += tc.function.arguments;
+                        }
+                    }
+                    if (text && !isToolStream) { full += text; onToken(text); }
+                }
+            }
+            const finalToolCalls = toolAccum.filter(Boolean).map(tc => ({ id: tc.id, type: tc.type, function: { name: tc.function.name, arguments: tc.function.arguments } }));
+            onDone(full, finalToolCalls.length ? finalToolCalls : null);
+        } catch (err) {
+            if (err.name === 'AbortError') { onDone('', { _aborted: true }); return; }
+            onError(err.message || 'Network error');
+        } finally {
+            if (watchdog) clearInterval(watchdog);
+        }
+    }
+
+    async function streamGoogle(messages, modelId, apiKey, callbacks, signal, tools) {
+        const { onToken, onDone, onError } = callbacks;
+        let watchdog = null;
+        try {
+            const sysMsg = messages.find(m => m.role === 'system');
+            const contents = messages.filter(m => m.role !== 'system').map(m => {
+                if (m.role === 'tool') {
+                    let response;
+                    try { response = JSON.parse(m.content); } catch (e) { response = { result: m.content }; }
+                    return { role: 'function', parts: [{ functionResponse: { name: m.name, response } }] };
+                }
+                if (m.role === 'assistant' && m.tool_calls) {
+                    const parts = m.content ? [{ text: m.content }] : [];
+                    for (const tc of m.tool_calls) {
+                        let args;
+                        try { args = JSON.parse(tc.function.arguments); } catch (e) { args = {}; }
+                        parts.push({ functionCall: { name: tc.function.name, args } });
+                    }
+                    return { role: 'model', parts };
+                }
+                return { role: m.role === 'assistant' ? 'model' : 'user', parts: toGoogleParts(m.content) };
+            });
+            const body = { contents };
+            if (sysMsg) body.system_instruction = { parts: [{ text: sysMsg.content }] };
+            if (tools && tools.length) {
+                body.tools = [{
+                    functionDeclarations: tools.map(t => ({
+                        name: t.function.name,
+                        description: t.function.description,
+                        parameters: t.function.parameters
+                    }))
+                }];
+            }
+            const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + modelId + ':streamGenerateContent?alt=sse&key=' + apiKey;
+            const fetchPromise = fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal });
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Connection timed out after ' + (FETCH_TIMEOUT / 1000) + 's')), FETCH_TIMEOUT));
+            const res = await Promise.race([fetchPromise, timeoutPromise]);
+            if (!res.ok) { const b = await res.text(); onError(parseApiError(res.status, b)); return; }
+            let lastChunkTime = Date.now();
+            watchdog = setInterval(() => {
+                if (Date.now() - lastChunkTime > 15000) {
+                    onError('Stream timed out after 15s of no data');
+                }
+            }, 2000);
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let full = '', buf = '', images = [], toolAccum = [];
+            while (true) {
+                const readPromise = reader.read();
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Chunk timeout')), 15000));
+                const { done, value } = await Promise.race([readPromise, timeoutPromise]);
+                if (done) break;
+                lastChunkTime = Date.now();
+                buf += decoder.decode(value, { stream: true });
+                const { rest, events } = parseSSE(buf);
+                buf = rest;
+                for (const ev of events) {
+                    const parts = ev?.candidates?.[0]?.content?.parts || [];
+                    for (const part of parts) {
+                        if (part.text) { full += part.text; onToken(part.text); }
+                        if (part.inline_data) images.push({ mime: part.inline_data.mime_type, data: part.inline_data.data });
+                        if (part.functionCall) {
+                            const tc = part.functionCall;
+                            toolAccum.push({
+                                id: 'call_google_' + toolAccum.length,
+                                type: 'function',
+                                function: { name: tc.name, arguments: JSON.stringify(tc.args || {}) }
+                            });
+                        }
+                    }
+                }
+            }
+            const finalToolCalls = toolAccum.length ? toolAccum : null;
+            onDone(full, finalToolCalls || (images.length ? images : null));
+        } catch (err) {
+            if (err.name === 'AbortError') { onDone('', { _aborted: true }); return; }
+            onError(err.message || 'Network error');
+        } finally {
+            if (watchdog) clearInterval(watchdog);
+        }
+    }
+
+    function callProvider(messages, model, callbacks, signal) {
+        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        const allModels = [...models, ...StateManager.get('customModels')];
+        const attempted = [];
+        let _fallbackInProgress = false;
+        (function attempt(currentModel) {
+            const apiKey = keys[currentModel.provider] || '';
+            const attemptKey = currentModel.provider + ':' + currentModel.modelId;
+            if (attempted.includes(attemptKey)) { callbacks.onError('Circular fallback detected for ' + currentModel.provider); return; }
+            attempted.push(attemptKey);
+            if (!apiKey) { tryNext(currentModel); return; }
+            const tokensReceived = { value: false };
+            const resetFlag = () => { _fallbackInProgress = false; };
+            const wrappedCallbacks = {
+                onToken: (token) => { tokensReceived.value = true; callbacks.onToken(token); },
+                onDone: (text, extra) => { resetFlag(); callbacks.onDone(text, extra); },
+                onError: (errMsg) => {
+                    if (!tokensReceived.value && attempted.length < FALLBACK_CHAIN.length) { resetFlag(); if (callbacks.onFallbackNotice) callbacks.onFallbackNotice(errMsg); tryNext(currentModel); }
+                    else { resetFlag(); callbacks.onError(errMsg); }
+                },
+                onToolStart: callbacks.onToolStart,
+            };
+            const tools = (currentModel.tools === 'Function Calling' && HARDCODED_TOOLS.length) ? HARDCODED_TOOLS : undefined;
+            const endpoint = PROVIDER_ENDPOINTS[currentModel.provider];
+            if (endpoint) streamOpenAI(endpoint, apiKey, currentModel.modelId, messages, wrappedCallbacks, signal, tools);
+            else if (currentModel.provider === 'google') streamGoogle(messages, currentModel.modelId, apiKey, wrappedCallbacks, signal, tools);
+            else wrappedCallbacks.onError('Unknown provider: ' + currentModel.provider);
+        })(model);
+
+        function tryNext(failedModel) {
+            if (_fallbackInProgress) return;
+            _fallbackInProgress = true;
+            const keysNow = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+            const hasAnyKey = Object.values(keysNow).some(k => k && k.trim());
+            if (!hasAnyKey) { _fallbackInProgress = false; callbacks.onError('No API keys configured. Open API Keys & Vault to add your keys.'); return; }
+            const currentIdx = FALLBACK_CHAIN.findIndex(f => f.provider === failedModel.provider && f.modelId === failedModel.modelId);
+            for (let i = Math.max(0, currentIdx + 1); i < FALLBACK_CHAIN.length; i++) {
+                const fb = FALLBACK_CHAIN[i];
+                const attemptKey = fb.provider + ':' + fb.modelId;
+                if (attempted.includes(attemptKey)) continue;
+                if (!keysNow[fb.provider]) continue;
+                const fbModel = allModels.find(m => m.provider === fb.provider && m.modelId === fb.modelId);
+                if (!fbModel || fbModel.type !== 'chat') continue;
+                StateManager.set('selectedModel', fbModel);
+                if (callbacks.onFallback) callbacks.onFallback(fbModel, failedModel);
+                attempt(fbModel);
+                return;
+            }
+            _fallbackInProgress = false;
+            callbacks.onError('All providers exhausted');
+        }
+    }
+
+    return { callProvider, parseSSE, extractOpenAIChunk, streamOpenAI, streamGoogle };
+})();
+// ============================================================
+// 10. APP — orchestration layer, event wiring, sendMessage
+// ============================================================
+const App = (() => {
+    let _streamState = null;
+    let _wipeHandlerAttached = false;
+    let _aiNoteIdx = 0, _lastUserKeyTime = 0;
+
+    function sendMessage() {
+        const input = document.getElementById('terminal-input');
+        const msg = input.value.trim();
+        const attachment = StateManager.get('pendingAttachment');
+        const selectedModel = StateManager.get('selectedModel');
+        const history = StateManager.get('conversationHistory');
+        if ((!msg && !attachment) || StateManager.get('isStreaming')) {
+            if (!msg && !attachment && !StateManager.get('isStreaming')) DomLayer.showToast('warning', 'Type a message or attach an image before sending.');
+            return;
+        }
+        if (!selectedModel) { DomLayer.showError('No model selected. Click a model in the fleet panel first.'); return; }
+        if (selectedModel.type !== 'chat') { DomLayer.showError('Cannot chat with ' + selectedModel.name + ' \u2014 it is a ' + selectedModel.type + ' model.'); return; }
+        if (attachment && !selectedModel.vision) { DomLayer.showError(selectedModel.name + ' does not support vision. Select a model with vision capability or remove the attachment.'); return; }
+        StateManager.recompileSystemMessage();
+        const maxCtx = parseCtx(selectedModel.ctx);
+        const currentTokens = estimateTokens(history);
+        const msgTokens = estimateTokens([{ role: 'user', content: msg || '...' }]);
+        if (maxCtx !== Infinity && currentTokens + msgTokens + 2048 > maxCtx) {
+            const dropped = StateManager.trimHistoryForModel(selectedModel.ctx, 2048 + msgTokens);
+            if (dropped > 0) { DomLayer.archiveMessages(StateManager.get('conversationHistory').length - 1); DomLayer.addHorizonBanner(); }
+        }
+        _aiNoteIdx = 0;
+        playSound('click');
+        DomLayer.addUserMessage(msg, attachment);
+        input.value = '';
+        try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (e) { }
+        const collapsedH = input.scrollHeight || 36;
+        input.style.height = collapsedH + 'px';
+        document.getElementById('chat-input-area').classList.remove('input-expanded');
+        const userContent = attachment ? [{ type: 'text', text: msg || '...' }, { type: 'image_url', image_url: { url: attachment.dataUrl } }] : msg;
+        StateManager.pushMessage({ role: 'user', content: userContent });
+        StateManager.set('isStreaming', true);
+        DomLayer.updateSendStopButtons(true);
+        DomLayer.updateTerminalStatus('info', 'Processing...');
+        AvatarEngine.startSpeaking();
+        playSound('start');
+        StateManager.set('toolLoopIteration', 0);
+        StateManager.set('lastToolCallSig', null);
+        StateManager.set('lastToolCallRepeat', 0);
+        startStream();
+    }
+
+    function regenerateResponse(responseElement) {
+        if (StateManager.get('isStreaming')) return;
+        const containers = document.querySelectorAll('#terminal-output .msg-container');
+        let idx = -1;
+        containers.forEach((c, i) => { if (c === responseElement) idx = i; });
+        if (idx < 1) return;
+        const userEl = containers[idx - 1];
+        if (!userEl) return;
+        const history = StateManager.get('conversationHistory');
+        let respIdx = -1;
+        for (let i = history.length - 1; i >= 0; i--) {
+            if (history[i].role === 'assistant') { respIdx = i; break; }
+        }
+        if (respIdx < 1) return;
+        const origUserMsg = history[respIdx - 1];
+        let userText = '';
+        let hadImage = false;
+        if (typeof origUserMsg.content === 'string') userText = origUserMsg.content;
+        else if (Array.isArray(origUserMsg.content)) {
+            for (const part of origUserMsg.content) {
+                if (part.type === 'text') userText = part.text;
+                if (part.type === 'image_url') hadImage = true;
+            }
+        }
+        if (hadImage) {
+            DomLayer.showToast('warning', 'Original message had an image — please re-attach it for regeneration.');
+            return;
+        }
+        history.splice(respIdx - 1, 2);
+        userEl.remove();
+        responseElement.remove();
+        DomLayer.showInfoInStatus('Regenerating...');
+        const input = document.getElementById('terminal-input');
+        input.value = userText;
+        StateManager.saveConversation();
+        sendMessage();
+    }
+
+    function startStream() {
+        const abortCtrl = new AbortController();
+        StateManager.set('abortController', abortCtrl);
+        const container = DomLayer.createResponseContainer();
+        const streamState = { container, fullText: '', tokenCount: 0, tokensReceived: false, startTime: performance.now(), attachmentCleared: false, tokenFlowInterval: null, slowWarning: null };
+        _streamState = streamState;
+        streamState.slowWarning = setTimeout(() => {
+            if (!streamState.tokensReceived) DomLayer.showInfoInStatus('Slow response \u2014 still waiting...');
+        }, 8000);
+        streamState.tokenFlowInterval = setInterval(() => {
+            const elapsed = (performance.now() - streamState.startTime) / 1000;
+            const tps = streamState.tokenCount / Math.max(elapsed, 0.1);
+            DomLayer.updateTokenFlow(tps, streamState.tokenCount, elapsed);
+        }, 500);
+        ApiLayer.callProvider(StateManager.get('conversationHistory'), StateManager.get('selectedModel'), {
+            onToken: (token) => {
+                if (!streamState.attachmentCleared) { streamState.attachmentCleared = true; App.removeAttachment(); }
+                if (!streamState.tokensReceived) {
+                    DomLayer.updateTerminalStatus('streaming');
+                    if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
+                }
+                streamState.fullText += token;
+                streamState.tokenCount++;
+                streamState.tokensReceived = true;
+                DomLayer.updateStreamText(container.textContainer, streamState.fullText);
+                if (!StateManager.get('userScrolledAway')) document.getElementById('terminal-output').scrollTop = document.getElementById('terminal-output').scrollHeight;
+                if (streamState.tokenCount % 5 === 0) playSound('type');
+            },
+            onDone: (finalText, extra) => {
+                if (extra && extra._aborted) { finalizeResponse(streamState, finalText, null, true); return; }
+                if (!extra || !extra.length) { finalizeResponse(streamState, finalText, null, false); return; }
+                if (extra[0] && extra[0].mime) { finalizeResponse(streamState, finalText, extra, false); return; }
+                if (StateManager.get('selectedModel') && StateManager.get('selectedModel').tools === 'Function Calling') { handleToolCalls(finalText, extra).catch(() => DomLayer.showError('Tool execution failed', true)); return; }
+                finalizeResponse(streamState, finalText, null, false);
+            },
+            onError: (errMsg) => {
+                AvatarEngine.stopSpeaking();
+                StateManager.set('isStreaming', false);
+                StateManager.set('abortController', null);
+                if (streamState.tokenFlowInterval) { clearInterval(streamState.tokenFlowInterval); streamState.tokenFlowInterval = null; }
+                if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
+                DomLayer.updateSendStopButtons(false);
+                DomLayer.updateTerminalStatus('standby');
+                DomLayer.showError(errMsg, true);
+            },
+            onToolStart: () => DomLayer.updateTerminalStatus('info', 'Executing Tool...'),
+            onFallback: (fbModel, failedModel) => {
+                const notice = document.createElement('div');
+                notice.className = 'text-[10px] text-yellow-500/80 font-mono border-l-2 border-yellow-500/30 pl-2 mb-1';
+                notice.textContent = '[SYSTEM: ' + failedModel.provider.toUpperCase() + ' FAILED \u2192 FALLBACK TO ' + fbModel.provider.toUpperCase() + ' (' + fbModel.name + ')]';
+                document.getElementById('terminal-output')?.appendChild(notice);
+                playSound('error');
+                setTimeout(() => playSound('select'), 80);
+                DomLayer.syncFleetSelection(fbModel);
+                DomLayer.updateActiveModelBar(fbModel);
+                DomLayer.updateTerminalStatus('standby');
+            },
+            onFallbackNotice: (errMsg) => DomLayer.showInfoInStatus(errMsg + ' — attempting fallback...'),
+            signal: abortCtrl.signal,
+        });
+    }
+
+    function finalizeResponse(streamState, finalText, images, aborted) {
+        AvatarEngine.stopSpeaking();
+        StateManager.set('isStreaming', false);
+        StateManager.set('abortController', null);
+        if (streamState.tokenFlowInterval) { clearInterval(streamState.tokenFlowInterval); streamState.tokenFlowInterval = null; }
+        if (streamState.slowWarning) { clearTimeout(streamState.slowWarning); streamState.slowWarning = null; }
+        const latency = Math.floor(performance.now() - streamState.startTime);
+        if (streamState.tokenCount) DomLayer.updateTokenFlow(streamState.tokenCount / Math.max(latency / 1000, 0.1), streamState.tokenCount, latency / 1000);
+        else DomLayer.updateTokenFlow(null);
+        DomLayer.updateSendStopButtons(false);
+        DomLayer.updateTerminalStatus('standby');
+        if (finalText) {
+            DomLayer.finalizeResponse(streamState.container.textContainer, finalText);
+            StateManager.pushMessage({ role: 'assistant', content: finalText });
+        }
+        if (images && images.length && streamState.container.gallery) DomLayer.displayImages(streamState.container.gallery, images);
+        playSound('done');
+        DomLayer.updateLatency(latency);
+        DomLayer.updateTimestamp(streamState.container.element, latency, aborted);
+        StateManager.saveConversation();
+        DomLayer.updateContextMeter();
+        DomLayer.updateSessionStats();
+    }
+
+    async function handleToolCalls(partialText, toolCalls) {
+        const iter = (StateManager.get('toolLoopIteration') || 0) + 1;
+        StateManager.set('toolLoopIteration', iter);
+        if (iter > MAX_TOOL_ITERATIONS) { DomLayer.showError('Tool loop exceeded maximum iterations (' + MAX_TOOL_ITERATIONS + '). Aborting.'); return; }
+        StateManager.pushMessage({ role: 'assistant', content: partialText || null, tool_calls: toolCalls });
+        const { results, abortLoop } = await ToolExecutor.execute(toolCalls, StateManager.get('conversationHistory'));
+        if (abortLoop) {
+            StateManager.set('lastToolCallSig', null);
+            StateManager.set('lastToolCallRepeat', 0);
+            AvatarEngine.stopSpeaking();
+            StateManager.set('isStreaming', false);
+            StateManager.set('abortController', null);
+            if (_streamState?.tokenFlowInterval) { clearInterval(_streamState.tokenFlowInterval); _streamState.tokenFlowInterval = null; }
+            if (_streamState?.slowWarning) { clearTimeout(_streamState.slowWarning); _streamState.slowWarning = null; }
+            DomLayer.updateSendStopButtons(false);
+            DomLayer.updateTerminalStatus('standby');
+            DomLayer.showError('Tool loop aborted: repeated identical tool call detected.', false);
+            return;
+        }
+        for (const r of results) StateManager.pushMessage({ role: 'tool', tool_call_id: r.tool_call_id, name: r.name, content: r.content });
+        DomLayer.renderToolCallCard(toolCalls, results);
+        StateManager.saveConversation();
+        startStream();
+    }
+
+    function stopStreaming() {
+        if (!StateManager.get('isStreaming')) return;
+        playSound('stop');
+        const ctrl = StateManager.get('abortController');
+        if (ctrl) ctrl.abort();
+        StateManager.set('isStreaming', false);
+        StateManager.set('abortController', null);
+        AvatarEngine.stopSpeaking();
+        if (_streamState?.tokenFlowInterval) { clearInterval(_streamState.tokenFlowInterval); _streamState.tokenFlowInterval = null; }
+        if (_streamState?.slowWarning) { clearTimeout(_streamState.slowWarning); _streamState.slowWarning = null; }
+        DomLayer.updateSendStopButtons(false);
+        DomLayer.updateTerminalStatus('standby');
+    }
+    function selectModel(model) {
+        if (StateManager.get('isStreaming')) {
+            stopStreaming();
+        }
+        if (StateManager.get('isStreaming')) return;
+        DomLayer.updateModelProfile(model);
+        if (model.type !== 'chat') { DomLayer.showToast('warning', '[' + model.name + '] is a ' + model.type + ' model. Select a chat model for conversation.'); return; }
+        document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
+        const match = findModelItem(model.modelId, model.provider);
+        if (match) match.classList.add('active');
+        const doSwitch = () => {
+            StateManager.set('selectedModel', model);
+            DomLayer.updateActiveModelBar(model);
+            localStorage.setItem(STORAGE_KEY_ACTIVE_MODEL, JSON.stringify({ provider: model.provider, modelId: model.modelId }));
+            StateManager.recompileSystemMessage();
+            const history = StateManager.get('conversationHistory');
+            if (hasImageContent(history) && !model.vision) {
+                const newHistory = history.map(msg => {
+                    if (Array.isArray(msg.content)) { const text = msg.content.filter(p => p.type === 'text').map(p => p.text).join(' '); return { ...msg, content: text || '[image removed \u2014 model does not support vision]' }; }
+                    return msg;
+                });
+                history.length = 0; history.push(...newHistory);
+                document.querySelectorAll('#terminal-output .msg-container .text-gray-500').forEach(el => { if (el.textContent.includes('[image]')) el.innerHTML = el.innerHTML.replace('[image]', '<span class="text-yellow-600">[image removed \u2014 no vision]</span>'); });
+                DomLayer.showInfoInStatus('Image content stripped \u2014 model has no vision support');
+            }
+            const dropped = StateManager.trimHistoryForModel(model.ctx, 2048);
+            if (dropped > 0) {
+                DomLayer.archiveMessages(StateManager.get('conversationHistory').length - 1);
+                DomLayer.addHorizonBanner();
+                DomLayer.showInfoInStatus('Archived ' + dropped + ' messages to fit ' + model.name + '\'s ' + model.ctx + ' context');
+            }
+            StateManager.saveConversation();
+            playSound('select');
+            DomLayer.updateTerminalStatus('standby');
+            DomLayer.showInfoInStatus('Switched to [' + model.name + ']');
+            DomLayer.updateContextMeter();
+        };
+        const currentModel = StateManager.get('selectedModel');
+        if (currentModel && currentModel.modelId === model.modelId && currentModel.provider === model.provider) { StateManager.recompileSystemMessage(); StateManager.saveConversation(); return; }
+        if (StateManager.get('conversationHistory').length > 1) {
+            showConfirmModal({
+                title: 'Switch Model?',
+                message: 'History will be preserved. Messages outside the new model\'s context window will be archived.',
+                onConfirm: doSwitch,
+                onCancel: () => {
+                    const oldModel = StateManager.get('selectedModel');
+                    document.querySelectorAll('.model-item').forEach(el => el.classList.remove('active'));
+                    if (oldModel) { const m = findModelItem(oldModel.modelId, oldModel.provider); if (m) m.classList.add('active'); }
+                }
+            });
+        } else doSwitch();
+    }
+
+    function toggleVault() { DomLayer.toggleVault(); }
+
+    function loadEnvFile() {
+        document.getElementById('env-file-input').value = '';
+        document.getElementById('env-file-input').click();
+    }
+
+    function handleEnvFile(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        if (file.size > 10240) {
+            DomLayer.showToast('error', '.env file exceeds 10KB limit.');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const text = ev.target.result;
+                const env = {};
+                const lines = text.split('\n');
+                for (const raw of lines) {
+                    const line = raw.trim();
+                    if (!line || line.startsWith('#')) continue;
+                    const m = line.match(/^\s*([A-Za-z_]\w*)\s*=\s*(.*?)\s*$/);
+                    if (!m) continue;
+                    let val = m[2].trim();
+                    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'")))
+                        val = val.slice(1, -1);
+                    env[m[1]] = val;
+                }
+                const fieldMap = { GROQ_API_KEY:'key-groq', OPENROUTER_API_KEY:'key-openrouter', GOOGLE_API_KEY:'key-google', GEMINI_API_KEY:'key-google', NVIDIA_API_KEY:'key-nvidia' };
+                let count = 0;
+                for (const [ev, id] of Object.entries(fieldMap)) {
+                    if (env[ev]) { document.getElementById(id).value = env[ev]; count++; }
+                }
+                if (!count) { DomLayer.showToast('error', 'No recognized API keys found in .env file.'); return; }
+                saveKeys();
+                playSound('deploy');
+            } catch (err) {
+                DomLayer.showToast('error', 'Failed to parse .env file: ' + err.message);
+            }
+        };
+        reader.onerror = () => DomLayer.showToast('error', 'Failed to read .env file.');
+        reader.readAsText(file);
+    }
+
+    function saveKeys() {
+        const keys = { groq: document.getElementById('key-groq').value, openrouter: document.getElementById('key-openrouter').value, google: document.getElementById('key-google').value, nvidia: document.getElementById('key-nvidia').value };
+        localStorage.setItem('war_chest_keys', JSON.stringify(keys));
+        DomLayer.toggleVault();
+        DomLayer.showToast('success', 'API keys saved to secure local vault.');
+        validateProviderModels();
+    }
+
+    function loadKeys() {
+        const saved = localStorage.getItem('war_chest_keys');
+        if (saved) { const keys = JSON.parse(saved); document.getElementById('key-groq').value = keys.groq || ''; document.getElementById('key-openrouter').value = keys.openrouter || ''; document.getElementById('key-google').value = keys.google || ''; document.getElementById('key-nvidia').value = keys.nvidia || ''; }
+    }
+
+    function applySystemPrompt() {
+        const val = document.getElementById('prompt-editor').value.trim();
+        StateManager.set('userPrompt', val || null);
+        try { if (val) localStorage.setItem(STORAGE_KEY_PROMPT, val); else localStorage.removeItem(STORAGE_KEY_PROMPT); } catch (e) { }
+        StateManager.recompileSystemMessage();
+        StateManager.saveConversation();
+        DomLayer.updatePromptCharCount();
+        DomLayer.showInfoInStatus('Prompt applied');
+        playSound('deploy');
+    }
+
+    function resetSystemPrompt() {
+        StateManager.set('userPrompt', null);
+        localStorage.removeItem(STORAGE_KEY_PROMPT);
+        document.getElementById('prompt-editor').value = SYSTEM_PROMPT;
+        StateManager.recompileSystemMessage();
+        StateManager.saveConversation();
+        DomLayer.updatePromptCharCount();
+        DomLayer.showInfoInStatus('Prompt reset to default');
+        playSound('toggle');
+    }
+
+    function loadPrompt() {
+        try { const saved = localStorage.getItem(STORAGE_KEY_PROMPT); if (saved) { StateManager.set('userPrompt', saved); document.getElementById('prompt-editor').value = saved; } } catch (e) { }
+        DomLayer.updatePromptCharCount();
+    }
+    function showConfirmModal({ title, message, onConfirm, onCancel }) {
+        let overlay = document.getElementById('confirm-modal-overlay');
+        if (overlay) { overlay.remove(); overlay = null; }
+        overlay = document.createElement('div');
+        overlay.id = 'confirm-modal-overlay';
+        overlay.className = 'fixed inset-0 z-[9999] bg-black/70 flex items-center justify-center';
+        overlay.innerHTML = '<div class="bg-[#0c0c1a] border border-green-500/20 rounded-sm p-6 max-w-md w-full shadow-[0_0_30px_rgba(0,255,0,0.08)]"><h2 class="text-green-400 font-bold text-lg mb-3 tracking-wider">' + escapeHtml(title) + '</h2><p class="text-green-300/70 text-sm mb-6 font-mono leading-relaxed">' + escapeHtml(message) + '</p><div class="flex gap-3 justify-end"><button class="px-4 py-2 text-xs text-green-500/60 hover:text-green-400 border border-green-500/20 hover:border-green-500/40 rounded-sm transition-colors font-mono tracking-wider uppercase cancel-btn">Cancel</button><button class="px-4 py-2 text-xs text-black bg-gradient-to-r from-green-400 to-emerald-500 rounded-sm font-bold font-mono tracking-wider hover:from-green-300 hover:to-emerald-400 transition-all ok-btn">Confirm</button></div></div>';
+        document.body.appendChild(overlay);
+        const okBtn = overlay.querySelector('.ok-btn');
+        const cancelBtn = overlay.querySelector('.cancel-btn');
+        okBtn.focus();
+        okBtn.addEventListener('click', () => { overlay.remove(); onConfirm(); });
+        cancelBtn.addEventListener('click', () => { overlay.remove(); onCancel && onCancel(); });
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) { overlay.remove(); onCancel && onCancel(); } });
+        const focusable = overlay.querySelectorAll('button');
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        overlay.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { overlay.remove(); onCancel && onCancel(); }
+            if (e.key === 'Tab') { if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); } }
+        });
+    }
+
+    function wipeSystem() {
+        showConfirmModal({
+            title: 'Wipe System',
+            message: 'Type DESTROY in the input field.\n\nThis will permanently delete all:\n\u2022 API Keys\n\u2022 Conversation History\n\u2022 Stored Prompts\n\u2022 Reference Documents\n\u2022 Custom Models\n\u2022 Model Validation Cache\n\nType DESTROY to confirm.',
+            onConfirm: () => {
+                const input = document.getElementById('terminal-input');
+                input.placeholder = 'type DESTROY to confirm...';
+                input.value = '';
+                input.focus();
+                const handler = () => {
+                    if (input.value.trim() === 'DESTROY') {
+                        playSound('wipe');
+                        StateManager.wipeAll();
+                        document.querySelectorAll('#terminal-output > *').forEach(el => el.remove());
+                        DomLayer.showToast('success', 'All data wiped. System reset.');
+                        input.value = '';
+                        DomLayer.updateTerminalStatus('standby');
+                        DomLayer.updateContextMeter();
+                        DomLayer.updateSessionStats();
+                        DomLayer.showInfoInStatus('System wiped clean');
+                        input.removeEventListener('keydown', handler);
+                        _wipeHandlerAttached = false;
+                    }
+                };
+                if (!_wipeHandlerAttached) {
+                    input.addEventListener('keydown', handler);
+                    _wipeHandlerAttached = true;
+                }
+            }
+        });
+    }
+
+    function validateProviderModels() {
+        const allModels = [...models, ...StateManager.get('customModels')];
+        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+        const ENDPOINTS = {
+            groq: { url: 'https://api.groq.com/openai/v1/models', keyParam: 'header' },
+            openrouter: { url: 'https://openrouter.ai/api/v1/models', keyParam: 'header' },
+            nvidia: { url: 'https://integrate.api.nvidia.com/v1/chat/completions', keyParam: 'header' },
+            google: { url: null, keyParam: 'query' },
+        };
+        fetchAndValidate(0);
+        function fetchAndValidate(idx) {
+            if (idx >= allModels.length) return;
+            const model = allModels[idx];
+            if (StateManager.get('validatedModels')[model.modelId + ':' + model.provider]) { fetchAndValidate(idx + 1); return; }
+            const apiKey = keys[model.provider];
+            if (!apiKey) { fetchAndValidate(idx + 1); return; }
+            const cfg = ENDPOINTS[model.provider];
+            if (!cfg) { fetchAndValidate(idx + 1); return; }
+            const id = model.modelId;
+            if (model.provider === 'google') {
+                fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + apiKey)
+                    .then(r => r.json().then(d => {
+                        const valid = d.models?.some(m => m.name === 'models/' + id);
+                        StateManager.setValidated(id + ':' + model.provider, valid);
+                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-30', 'pointer-events-none'); }
+                    }).catch(() => { })).catch(() => { }).finally(() => fetchAndValidate(idx + 1));
+            } else {
+                fetch(cfg.url, { headers: { 'Authorization': 'Bearer ' + apiKey } })
+                    .then(r => r.json().then(d => {
+                        const modelList = d.data || d.models || [];
+                        const valid = modelList.some(m => (m.id === id) || (m.name === id));
+                        StateManager.setValidated(id + ':' + model.provider, valid);
+                        if (!valid) { const el = findModelItem(id, model.provider); if (el) el.classList.add('opacity-30', 'pointer-events-none'); }
+                    }).catch(() => { })).catch(() => { }).finally(() => fetchAndValidate(idx + 1));
+            }
+        }
+    }
+
+    function handleKeyDown(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); return; }
+        const SKIP_KEYS = ['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'];
+        if (e.key === 'Backspace') { playSound('keyclick', 440); return; }
+        if (SKIP_KEYS.includes(e.key)) return;
+        if (e.ctrlKey || e.metaKey || e.isComposing) return;
+        const now = Date.now();
+        if (now - _lastUserKeyTime < 50) return;
+        _lastUserKeyTime = now;
+        playSound('keyclick');
+    }
+
+    function handleInput(e) {
+        const ta = e.target;
+        const maxInput = Math.min(window.innerHeight * 0.35, INPUT_MAX_HEIGHT);
+        ta.style.height = 'auto';
+        const nh = Math.min(ta.scrollHeight, maxInput);
+        ta.style.height = nh + 'px';
+        document.getElementById('chat-input-area').classList.toggle('input-expanded', nh > 40);
+        try { sessionStorage.setItem(STORAGE_KEY_DRAFT, ta.value); } catch (e) { }
+    }
+
+    function handlePaste(e) {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+            if (item.type.startsWith('image/')) {
+                const file = item.getAsFile();
+                if (file) { handleAttachment(file); break; }
+            }
+        }
+    }
+
+    function handleAttachment(file) {
+        if (!file) { App.removeAttachment(); return; }
+        if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) { DomLayer.showToast('error', 'Unsupported file type: ' + file.type + '. Please upload JPG, PNG, GIF, or WebP images only.'); return; }
+        if (file.size > 5 * 1024 * 1024) { DomLayer.showToast('error', 'Image exceeds 5MB limit.'); return; }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const state = StateManager.get('pendingAttachment') || {};
+            state.fileName = file.name;
+            state.dataUrl = ev.target.result;
+            StateManager.set('pendingAttachment', state);
+            DomLayer.showAttachmentPreview(state.fileName, state.dataUrl);
+            playSound('select');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function removeAttachment() { StateManager.set('pendingAttachment', null); DomLayer.removeAttachmentPreview(); playSound('click'); }
+
+    function loadConversation() {
+        const allModels = [...models, ...StateManager.get('customModels')];
+        const activeRaw = localStorage.getItem(STORAGE_KEY_ACTIVE_MODEL);
+        if (activeRaw) {
+            try { const parsed = JSON.parse(activeRaw); const found = allModels.find(m => m.provider === parsed.provider && m.modelId === parsed.modelId); if (found) { StateManager.set('selectedModel', found); DomLayer.updateActiveModelBar(found); DomLayer.updateModelProfile(found); const el = findModelItem(found.modelId, found.provider); if (el) el.classList.add('active'); } } catch (e) { }
+        }
+        if (!StateManager.get('selectedModel')) {
+            const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
+            const def = allModels.find(m => m.provider === DEFAULT_MODEL.provider && m.modelId === DEFAULT_MODEL.modelId) || allModels.find(m => keys[m.provider] && m.type === 'chat') || allModels[0];
+            if (def) { StateManager.set('selectedModel', def); DomLayer.updateActiveModelBar(def); DomLayer.updateModelProfile(def); }
+        }
+        StateManager.recompileSystemMessage();
+        DomLayer.renderConversation();
+        DomLayer.updateContextMeter();
+        DomLayer.updateSessionStats();
+        DomLayer.updateTerminalStatus('standby');
+    }
+
+    function loadDraft() { try { const saved = sessionStorage.getItem(STORAGE_KEY_DRAFT); if (saved) { document.getElementById('terminal-input').value = saved; document.getElementById('terminal-input').style.height = 'auto'; document.getElementById('terminal-input').style.height = Math.min(document.getElementById('terminal-input').scrollHeight, INPUT_MAX_HEIGHT) + 'px'; } } catch (e) { } }
+
+    function init() {
+        try { const saved = localStorage.getItem('war_chest_custom_models'); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed)) StateManager.set('customModels', parsed); } } catch (_) {}
+        loadConversation();
+        loadPrompt();
+        loadDraft();
+        loadKeys();
+        DomLayer.renderModelList();
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+        document.getElementById('stop-btn').addEventListener('click', stopStreaming);
+        document.getElementById('terminal-input').addEventListener('keydown', handleKeyDown);
+        document.getElementById('terminal-input').addEventListener('input', handleInput);
+        document.getElementById('terminal-input').addEventListener('paste', handlePaste);
+        document.getElementById('attach-btn').addEventListener('click', () => document.getElementById('file-input').click());
+        document.getElementById('file-input').addEventListener('change', (e) => handleAttachment(e.target.files[0]));
+        document.getElementById('model-list').addEventListener('click', (e) => {
+            const btn = e.target.closest('.custom-delete-btn');
+            if (!btn) return;
+            const item = btn.closest('.model-item');
+            if (!item) return;
+            const mid = item.dataset.modelId, prov = item.dataset.provider;
+            const custom = StateManager.get('customModels').filter(m => !(m.modelId === mid && m.provider === prov));
+            StateManager.set('customModels', custom);
+            try { localStorage.setItem('war_chest_custom_models', JSON.stringify(custom)); } catch (_) {}
+            DomLayer.showToast('info', 'Removed custom model');
+            DomLayer.renderModelList();
+        });
+        document.getElementById('apply-prompt-btn').addEventListener('click', applySystemPrompt);
+        document.getElementById('reset-prompt-btn').addEventListener('click', resetSystemPrompt);
+        document.getElementById('audio-toggle-btn').addEventListener('click', () => {
+            const muted = !StateManager.get('audioMuted');
+            StateManager.set('audioMuted', muted);
+            localStorage.setItem('war_chest_audio_muted', JSON.stringify(muted));
+            const btn = document.getElementById('audio-toggle-btn');
+            btn.textContent = muted ? '🔇' : '🔊';
+            btn.title = muted ? 'Unmute sounds' : 'Mute sounds';
+            btn.className = 'px-3 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border rounded transition-all ' + (muted ? 'border-red-500/50 hover:border-red-400' : 'border-green-500/50 hover:border-green-400');
+        });
+        document.getElementById('vault-btn').addEventListener('click', toggleVault);
+        document.getElementById('vault-close-btn').addEventListener('click', toggleVault);
+        document.getElementById('filter-bar').addEventListener('click', (e) => {
+            const capBtn = e.target.closest('[data-cap-filter]');
+            if (capBtn) {
+                const cf = capBtn.dataset.capFilter;
+                const current = [...(StateManager.get('capabilityFilters') || [])];
+                const idx = current.indexOf(cf);
+                if (idx > -1) current.splice(idx, 1); else current.push(cf);
+                StateManager.set('capabilityFilters', current);
+                document.querySelectorAll('#filter-bar .cap-filter-btn').forEach(b => {
+                    b.classList.toggle('active', current.includes(b.dataset.capFilter));
+                    b.classList.toggle('bg-gray-800/30', !current.includes(b.dataset.capFilter));
+                    b.classList.toggle('bg-gray-700/30', current.includes(b.dataset.capFilter));
+                });
+                DomLayer.renderModelList();
+                playSound('click');
+                return;
+            }
+            const btn = e.target.closest('[data-filter]');
+            if (!btn) return;
+            const filter = btn.dataset.filter;
+            document.querySelectorAll('#filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            StateManager.set('currentFilter', filter);
+            DomLayer.renderModelList();
+            playSound('click');
+        });
+        document.getElementById('terminal-output').addEventListener('scroll', function () {
+            const gap = this.scrollHeight - this.scrollTop - this.clientHeight;
+            const isAtBottom = gap < 80;
+            StateManager.set('userScrolledAway', !isAtBottom);
+            const fab = document.getElementById('scroll-bottom-btn');
+            if (fab) fab.classList.toggle('visible', !isAtBottom);
+        });
+        document.getElementById('save-keys-btn').addEventListener('click', saveKeys);
+        document.getElementById('load-env-btn').addEventListener('click', loadEnvFile);
+        document.getElementById('env-file-input').addEventListener('change', handleEnvFile);
+        document.getElementById('wipe-btn')?.addEventListener('click', wipeSystem);
+        document.getElementById('remove-attach-btn')?.addEventListener('click', removeAttachment);
+        document.addEventListener('scroll-to-bottom', () => DomLayer.scrollToBottom());
+        document.addEventListener('scroll-fab', () => DomLayer.scrollToBottom());
+        window.addEventListener('beforeunload', (e) => { if (document.getElementById('terminal-input')?.value) { e.preventDefault(); e.returnValue = ''; } });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (StateManager.get('isStreaming')) { stopStreaming(); return; }
+                const vault = document.getElementById('vault-modal');
+                if (vault && !vault.classList.contains('hidden')) { toggleVault(); return; }
+                const confirmOv = document.getElementById('confirm-modal-overlay');
+                if (confirmOv && confirmOv.style.display !== 'none' && confirmOv.classList.contains('open')) {
+                    const cancel = confirmOv.querySelector('.cancel-btn');
+                    if (cancel) cancel.click();
+                }
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+                e.preventDefault();
+                if (!StateManager.get('isStreaming')) {
+                    StateManager.set('conversationHistory', [{ role: 'system', content: StateManager.compiledPrompt() }]);
+                    document.querySelectorAll('#terminal-output > *').forEach(el => el.remove());
+                    StateManager.saveConversation();
+                    DomLayer.updateContextMeter();
+                    DomLayer.updateSessionStats();
+                    DomLayer.showInfoInStatus('Chat cleared');
+                }
+            }
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'c' || e.key === 'C')) {
+                const containers = document.querySelectorAll('#terminal-output .msg-container');
+                const lastAI = [...containers].reverse().find(el => el.querySelector('.text-green-500'));
+                if (lastAI) {
+                    const text = lastAI.querySelector('.markdown-body')?.textContent || '';
+                    if (text) navigator.clipboard.writeText(text).catch(() => {});
+                }
+            }
+        });
+        AvatarEngine.init();
+        document.getElementById('terminal-input').style.height = document.getElementById('terminal-input').scrollHeight + 'px';
+        setTimeout(() => playSound('poweron'), 300);
+        // audio state normalization on load
+        if (StateManager.get('audioMuted')) {
+            const btn = document.getElementById('audio-toggle-btn');
+            if (btn) { btn.textContent = '🔇'; btn.title = 'Unmute sounds'; btn.className = 'px-3 py-2 text-xs font-bold bg-gray-800/50 hover:bg-gray-700/50 border border-red-500/50 rounded transition-all hover:border-red-400'; }
+        }
+    }
+
+    return { init, sendMessage, stopStreaming, selectModel, toggleVault, saveKeys, loadEnvFile, handleEnvFile, loadKeys, applySystemPrompt, resetSystemPrompt, loadPrompt, wipeSystem, handleAttachment, removeAttachment, regenerateResponse };
+})();
+
+// ============================================================
+// 11. BOOT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => { App.init(); });
+
+</script>
+</body>
+</html>
