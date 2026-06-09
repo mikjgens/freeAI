@@ -1,6 +1,6 @@
 # freeAI — War Chest Command Center
 
-Single-file HTML chat interface for multiple LLM providers. No build step, no dependencies.
+Multi-file HTML + JS chat interface for multiple LLM providers. No build step, no dependencies.
 
 ## Usage
 
@@ -10,7 +10,7 @@ The active model persists across page refreshes. On first visit, the fallback ch
 
 ## Architecture
 
-`index.html` contains `<style>`, HTML, and `<script>` in one file. The JS is organized as IIFE modules loaded in dependency order:
+`index.html` contains `<style>`, HTML, and `<script>` with two helper files loaded before the main script: `models.js` (fleet data + constants) and `rag.js` (TF-IDF utilities). The JS is organized as IIFE modules loaded in dependency order:
 
 | Module | Purpose |
 |--------|---------|
