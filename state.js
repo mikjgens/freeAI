@@ -144,6 +144,7 @@ const StateManager = (() => {
         localStorage.removeItem(STORAGE_KEY_REFDOC);
         localStorage.removeItem(STORAGE_KEY_ACTIVE_MODEL);
         localStorage.removeItem('war_chest_audio_muted');
+        localStorage.removeItem('war_chest_graph');
         try { sessionStorage.removeItem(STORAGE_KEY_DRAFT); } catch (e) { }
         Object.assign(_state, {
             selectedModel: null, conversationHistory: [{ role: 'system', content: '' }], streamingCount: 0,

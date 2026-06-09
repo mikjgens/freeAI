@@ -433,6 +433,8 @@ const App = (() => {
             m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
         ) || [...models].find(m =>
             m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
+        ) || [...models].find(m =>
+            (m.tags?.includes('fast') || m.tags?.includes('lightweight')) && keys[m.provider] && m.type === 'chat'
         );
         if (!cheapModel) return;
 
@@ -448,7 +450,7 @@ const App = (() => {
         const subSignal = StateManager.get('subCallAbort')?.signal;
         ApiLayer.callProvider(
             [{ role: 'user', content: prompt }],
-            cheapModel,
+            { ...cheapModel, tools: 'None' },
             {
                 onToken: (t) => { full += t; },
                 onDone: () => {
@@ -465,7 +467,8 @@ const App = (() => {
                 onFallback: () => {},
                 onFallbackNotice: () => {},
             },
-            (subSignal || new AbortController().signal)
+            (subSignal || new AbortController().signal),
+            { noFallback: true }
         );
     }
 
@@ -475,6 +478,8 @@ const App = (() => {
             m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
         ) || [...models].find(m =>
             m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
+        ) || [...models].find(m =>
+            (m.tags?.includes('fast') || m.tags?.includes('lightweight')) && keys[m.provider] && m.type === 'chat'
         );
         if (!shadowModel || responseText.length < 50) return;
 
@@ -492,7 +497,7 @@ const App = (() => {
         const subSignal = StateManager.get('subCallAbort')?.signal;
         ApiLayer.callProvider(
             [{ role: 'user', content: prompt }],
-            shadowModel,
+            { ...shadowModel, tools: 'None' },
             {
                 onToken: (t) => { full += t; },
                 onDone: () => {
@@ -509,12 +514,16 @@ const App = (() => {
                 onFallback: () => {},
                 onFallbackNotice: () => {},
             },
-            (subSignal || new AbortController().signal)
+            (subSignal || new AbortController().signal),
+            { noFallback: true }
         );
     }
 
+    function _persistGraph(graph) {
+        try { localStorage.setItem('war_chest_graph', JSON.stringify(graph)); } catch (_) {}
+    }
+
     function extractEntities(responseText) {
-        // Always run local extraction first
         localEntityExtraction(responseText);
 
         const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
@@ -522,6 +531,8 @@ const App = (() => {
             m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
         ) || [...models].find(m =>
             m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
+        ) || [...models].find(m =>
+            (m.tags?.includes('fast') || m.tags?.includes('lightweight')) && keys[m.provider] && m.type === 'chat'
         );
         if (!cheapModel) return;
 
@@ -535,7 +546,7 @@ const App = (() => {
         const subSignal = StateManager.get('subCallAbort')?.signal;
         ApiLayer.callProvider(
             [{ role: 'user', content: prompt }],
-            cheapModel,
+            { ...cheapModel, tools: 'None' },
             {
                 onToken: (t) => { full += t; },
                 onDone: () => {
@@ -556,6 +567,7 @@ const App = (() => {
                             }
                         }
                         StateManager.set('knowledgeGraph', graph);
+                        _persistGraph(graph);
                         DomLayer.renderKnowledgeGraph(graph);
                     } catch (_) {}
                 },
@@ -564,7 +576,8 @@ const App = (() => {
                 onFallback: () => {},
                 onFallbackNotice: () => {},
             },
-            (subSignal || new AbortController().signal)
+            (subSignal || new AbortController().signal),
+            { noFallback: true }
         );
     }
 
@@ -572,29 +585,32 @@ const App = (() => {
         const skipWords = new Set(['This', 'That', 'These', 'Those', 'Here', 'There', 'It', 'They', 'We', 'You', 'I', 'He', 'She', 'The', 'A', 'An', 'And', 'Or', 'But', 'Because', 'However', 'Therefore', 'Also', 'Then', 'Now', 'First', 'Second', 'Third', 'Last', 'Next', 'Previous', 'Each', 'Every', 'Some', 'Any', 'All', 'Both', 'Neither', 'Either']);
         const found = new Set();
         const graph = StateManager.get('knowledgeGraph');
-        // Extract capitalized multi-word phrases (potential named entities)
+        const MAX_ENTITIES = 80;
+
+        function upsert(name, type) {
+            const existing = graph.entities.find(e => e.name === name);
+            if (existing) { existing.count = (existing.count || 1) + 1; found.add(name); }
+            else if (graph.entities.length < MAX_ENTITIES) { graph.entities.push({ name, type, count: 1, pinned: false }); found.add(name); }
+            else { found.add(name); }
+        }
+
         const namedMatches = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b/g) || [];
         for (const name of namedMatches) {
             if (skipWords.has(name) || name.length < 4) continue;
-            const existing = graph.entities.find(e => e.name === name);
-            if (existing) { existing.count = (existing.count || 1) + 1; found.add(name); }
+            upsert(name, 'concept');
         }
-        // Extract UPPERCASE acronyms
         const acronymMatches = text.match(/\b([A-Z]{2,8})\b/g) || [];
         for (const acro of acronymMatches) {
-            if (acro === 'AI' || acro === 'API' || acro === 'JSON' || acro === 'HTML' || acro === 'CSS') continue;
-            const existing = graph.entities.find(e => e.name === acro);
-            if (existing) { existing.count = (existing.count || 1) + 1; found.add(acro); }
+            if (['AI','API','JSON','HTML','CSS'].includes(acro)) continue;
+            upsert(acro, 'concept');
         }
-        // Extract quoted terms ("something") as concepts
         const quotedMatches = text.match(/"([^"]{3,60})"/g) || [];
         for (const q of quotedMatches) {
-            const name = q.replace(/"/g, '').trim();
-            const existing = graph.entities.find(e => e.name === name);
-            if (existing) { existing.count = (existing.count || 1) + 1; found.add(name); }
+            upsert(q.replace(/"/g, '').trim(), 'concept');
         }
         if (found.size) {
             StateManager.set('knowledgeGraph', graph);
+            _persistGraph(graph);
             DomLayer.renderKnowledgeGraph(graph);
         }
     }
@@ -1386,6 +1402,11 @@ const App = (() => {
         loadPrompt();
         loadDraft();
         loadKeys();
+        try {
+            const g = JSON.parse(localStorage.getItem('war_chest_graph') || 'null');
+            if (g && Array.isArray(g.entities)) StateManager.set('knowledgeGraph', g);
+        } catch (_) {}
+        DomLayer.renderKnowledgeGraph(StateManager.get('knowledgeGraph'));
         DomLayer.renderModelList();
         setupInputEvents();
         setupModelFilterEvents();
