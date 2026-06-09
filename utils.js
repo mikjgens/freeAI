@@ -119,8 +119,8 @@ function findModelItem(modelId, provider) {
 }
 
 function debounce(fn, ms) {
-    let t;
-    const debounced = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-    debounced.flush = () => { clearTimeout(t); fn(); };
+    let t, lastArgs = [];
+    const debounced = (...args) => { lastArgs = args; clearTimeout(t); t = setTimeout(() => fn(...lastArgs), ms); };
+    debounced.flush = () => { clearTimeout(t); fn(...lastArgs); };
     return debounced;
 }

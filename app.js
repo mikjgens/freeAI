@@ -128,7 +128,8 @@ const App = (() => {
         const add = (m) => { if (m && !modelsToCall.find(x => x.modelId === m.modelId && x.provider === m.provider)) modelsToCall.push(m); };
         add(originalModel); add(fast); add(deep); add(creative);
         for (const c of candidates) { if (modelsToCall.length >= 4) break; add(c); }
-        modelsToCall.length = Math.max(2, Math.min(modelsToCall.length, 4));
+        if (modelsToCall.length < 2) { DomLayer.showError('Delta Mode requires at least 2 available models.', false); return; }
+        if (modelsToCall.length > 4) modelsToCall.splice(4);
 
         const userMsgId = crypto.randomUUID();
         DomLayer.addUserMessage(msg, null, userMsgId);
@@ -151,31 +152,44 @@ const App = (() => {
 
         const abortSignal = StateManager.get('subCallAbort')?.signal;
         const results = [], errors = [];
-        let groqIndex = 0;
+        let groqIndex = 0, orIndex = 0;
 
         const allPromises = modelsToCall.map(m => new Promise((resolve) => {
-            const delay = m.provider === 'groq' ? (groqIndex++) * 2000 : 0;
+            const delay = m.provider === 'groq'
+                ? (groqIndex++) * 2000
+                : (orIndex++) * 1500;
             const fire = () => {
                 const start = performance.now();
                 let full = '';
-                ApiLayer.callProvider(deltaMessages, m, {
+                ApiLayer.callProvider(deltaMessages, { ...m, tools: 'None' }, {
                     onToken: (t) => { full += t; },
-                    onDone: () => resolve({ model: m.name, provider: m.provider, text: full, time: Math.floor(performance.now() - start) }),
+                    onDone: (text, extra) => {
+                        if (extra && extra._aborted) {
+                            resolve({ model: m.name, provider: m.provider, cancelled: true });
+                            return;
+                        }
+                        resolve({
+                            model: m.name,
+                            provider: m.provider,
+                            text: text || full,
+                            time: Math.floor(performance.now() - start),
+                        });
+                    },
                     onError: (err) => resolve({ model: m.name, provider: m.provider, error: err }),
                     onToolStart: () => {},
                     onFallback: () => {},
                     onFallbackNotice: () => {},
-                }, abortSignal || new AbortController().signal);
+                }, abortSignal || new AbortController().signal, { noFallback: true });
             };
             if (delay > 0) setTimeout(fire, delay); else fire();
         }));
 
         const outcomes = await Promise.allSettled(allPromises);
         for (const o of outcomes) {
-            if (o.status === 'fulfilled' && o.value) {
-                if (o.value.error) errors.push(o.value);
-                else results.push(o.value);
-            }
+            if (o.status !== 'fulfilled' || !o.value) continue;
+            if (o.value.cancelled) continue;
+            if (o.value.error) errors.push(o.value);
+            else results.push(o.value);
         }
 
         StateManager.decrementStreaming();

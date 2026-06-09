@@ -553,15 +553,15 @@ const DomLayer = (() => {
     }
 
     function exportHistoryJSON() {
-        const state = StateManager.get();
         const data = {
-            conversationHistory: state.conversationHistory,
-            ragEnabled: state.ragEnabled,
-            ragChunks: state.ragChunks,
-            refDoc: state.refDoc, // Include refDoc in export
+            conversationHistory: StateManager.get('conversationHistory'),
+            ragEnabled:          StateManager.get('ragEnabled'),
+            ragChunks:           StateManager.get('ragChunks'),
+            refDoc:              StateManager.get('refDoc'),
         };
 
-        if (state.conversationHistory.length === 0 && !state.refDoc) {
+        const hasHistory = data.conversationHistory && data.conversationHistory.length > 0;
+        if (!hasHistory && !data.refDoc) {
             showToast('warning', 'Nothing to export yet. (No chat history or reference document)');
             return;
         }
@@ -593,12 +593,10 @@ const DomLayer = (() => {
             try {
                 const parsed = JSON.parse(e.target.result);
                 if (parsed.conversationHistory && Array.isArray(parsed.conversationHistory)) {
-                    StateManager.set({
-                        conversationHistory: parsed.conversationHistory,
-                        ragEnabled: parsed.ragEnabled === true, // Ensure boolean
-                        ragChunks: parsed.ragChunks || [],
-                        refDoc: parsed.refDoc || null, // Import refDoc
-                    });
+                    StateManager.set('conversationHistory', parsed.conversationHistory);
+                    StateManager.set('ragEnabled', parsed.ragEnabled === true);
+                    StateManager.set('ragChunks', parsed.ragChunks || []);
+                    StateManager.set('refDoc', parsed.refDoc || null);
                     DomLayer.renderConversation(); // Re-render chat
                     DomLayer.updateDocUI(); // Update RAG doc UI
                     DomLayer.showToast('success', 'Chat history imported successfully.');
@@ -832,6 +830,7 @@ const DomLayer = (() => {
         if (_graphSim) cancelAnimationFrame(_graphSim);
 
         function tick() {
+            if (!canvas.isConnected) return;
             for (let i = 0; i < nodes.length; i++) {
                 nodes[i].vx += (w/2 - nodes[i].x) * 0.001;
                 nodes[i].vy += (h/2 - nodes[i].y) * 0.001;

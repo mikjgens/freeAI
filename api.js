@@ -39,6 +39,7 @@ const ApiLayer = (() => {
         let attempt = 0;
         async function tryRequest() {
             attempt++;
+            let settled = false;
             try {
                 const body = { model: modelId, messages, stream: true };
                 if (tools && tools.length) { body.tools = tools; body.tool_choice = 'auto'; }
@@ -56,7 +57,10 @@ const ApiLayer = (() => {
                         const delay = parseRetryAfter(b, res.headers) || (Math.pow(2, attempt) * 1000);
                         console.warn('[API] Rate limited — retrying in ' + Math.round(delay / 1000) + 's (attempt ' + attempt + '/' + MAX_RETRIES + ')');
                         if (callbacks.onFallbackNotice) callbacks.onFallbackNotice('Rate limited — retrying in ' + Math.round(delay / 1000) + 's...');
-                        await new Promise(r => { const t = setTimeout(() => { clearTimeout(t); r(); }, Math.min(delay, 30000)); });
+                        await new Promise((r, reject) => {
+                            const t = setTimeout(r, Math.min(delay, 30000));
+                            signal?.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+                        });
                         return tryRequest();
                     }
                     onError(parseApiError(res.status, b));
@@ -64,7 +68,13 @@ const ApiLayer = (() => {
                 }
                 let lastChunkTime = Date.now();
                 watchdog = setInterval(() => {
-                    if (Date.now() - lastChunkTime > 15000) onError('Stream timed out after 15s of no data');
+                    if (!settled && Date.now() - lastChunkTime > 15000) {
+                        settled = true;
+                        clearInterval(watchdog);
+                        watchdog = null;
+                        try { reader.cancel(); } catch (_) {}
+                        onError('Stream timed out after 15s of no data');
+                    }
                 }, 2000);
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder();
@@ -93,9 +103,14 @@ const ApiLayer = (() => {
                         if (text && !isToolStream) { full += text; onToken(text); }
                     }
                 }
-                const finalToolCalls = toolAccum.filter(Boolean).map(tc => ({ id: tc.id, type: tc.type, function: { name: tc.function.name, arguments: tc.function.arguments } }));
-                onDone(full, finalToolCalls.length ? finalToolCalls : null);
+                if (!settled) {
+                    settled = true;
+                    const finalToolCalls = toolAccum.filter(Boolean).map(tc => ({ id: tc.id, type: tc.type, function: { name: tc.function.name, arguments: tc.function.arguments } }));
+                    onDone(full, finalToolCalls.length ? finalToolCalls : null);
+                }
             } catch (err) {
+                if (settled) return;
+                settled = true;
                 if (err.name === 'AbortError') { onDone('', { _aborted: true }); return; }
                 console.error('[API] Fetch error: ' + (err.message || 'unknown'));
                 onError(err.message || 'Network error');
@@ -106,7 +121,7 @@ const ApiLayer = (() => {
         tryRequest();
     }
 
-    function callProvider(messages, model, callbacks, signal) {
+    function callProvider(messages, model, callbacks, signal, options = {}) {
         const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
         const allModels = [...models, ...StateManager.get('customModels')];
         const attempted = [];
@@ -145,6 +160,11 @@ const ApiLayer = (() => {
             const keysNow = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
             const hasAnyKey = Object.values(keysNow).some(k => k && k.trim());
             if (!hasAnyKey) { _fallbackInProgress = false; callbacks.onError('No API keys configured. Open API Keys & Vault to add your keys.'); return; }
+            if (options.noFallback) {
+                _fallbackInProgress = false;
+                callbacks.onError('[' + failedModel.provider + '] ' + failedModel.name + ' failed (no fallback)');
+                return;
+            }
             const currentIdx = FALLBACK_CHAIN.findIndex(f => f.provider === failedModel.provider && f.modelId === failedModel.modelId);
             for (let i = Math.max(0, currentIdx + 1); i < FALLBACK_CHAIN.length; i++) {
                 const fb = FALLBACK_CHAIN[i];
