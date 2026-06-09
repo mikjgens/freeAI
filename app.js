@@ -417,36 +417,46 @@ const App = (() => {
 
         const wc = (StateManager.get('watcherMessageCount') || 0) + 1;
         StateManager.set('watcherMessageCount', wc);
+        const smc = (StateManager.get('summaryMessageCount') || 0) + 1;
+        StateManager.set('summaryMessageCount', smc);
         if (!aborted && finalText) {
             if (wc >= 4) {
                 StateManager.set('watcherMessageCount', 0);
                 setTimeout(() => checkSessionIntelligence(), 1500);
                 setTimeout(() => runShadowAudit(finalText, streamState.container), 500);
             }
+            if (smc >= 6) {
+                StateManager.set('summaryMessageCount', 0);
+                setTimeout(() => summarizeSession(), 1000);
+            }
             setTimeout(() => extractEntities(finalText), 2000);
         }
     }
 
-    function checkSessionIntelligence() {
-        const history = StateManager.get('conversationHistory');
-        if (history.length < 4) return;
+    function _resolveSubModel() {
         const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
-        const cheapModel = [...models].find(m =>
+        return [...models].find(m =>
             m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
         ) || [...models].find(m =>
             m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
         ) || [...models].find(m =>
             (m.tags?.includes('fast') || m.tags?.includes('lightweight')) && keys[m.provider] && m.type === 'chat'
         );
+    }
+
+    function checkSessionIntelligence() {
+        const history = StateManager.get('conversationHistory');
+        if (history.length < 4) return;
+        const cheapModel = _resolveSubModel();
         if (!cheapModel) return;
 
-        const recent = history.slice(-10).map(m => {
+        const recent = history.slice(-8).map(m => {
             const content = typeof m.content === 'string' ? m.content :
                 (Array.isArray(m.content) ? m.content.filter(p => p.type === 'text').map(p => p.text).join(' ') : '');
-            return m.role + ': ' + content.slice(0, 300);
+            return m.role + ': ' + content.slice(0, 200);
         }).join('\n');
 
-        const prompt = 'Analyze this conversation. Return ONLY a JSON object: {"contradictions":[],"unresolved_questions":[],"drift_events":[],"recommendation":"","should_intervene":false}\n\n' + recent;
+        const prompt = 'You are a conversation QA auditor. Find contradictions, dangling questions, and topic shifts. Always output ALL fields even if empty. Return ONLY: {"contradictions":[],"questions":[],"drift":false,"rec":""}\n\nIf something is amiss, populate the arrays. Otherwise return empty arrays and empty rec. Do not fabricate problems.\n\nConversation:\n' + recent;
 
         let full = '';
         const subSignal = StateManager.get('subCallAbort')?.signal;
@@ -458,7 +468,14 @@ const App = (() => {
                 onDone: () => {
                     try {
                         const jsonStr = full.match(/\{[\s\S]*\}/)?.[0] || full;
-                        const analysis = JSON.parse(jsonStr);
+                        const raw = JSON.parse(jsonStr);
+                        const analysis = {
+                            contradictions: raw.contradictions || [],
+                            unresolved_questions: raw.questions || [],
+                            recommendation: raw.rec || '',
+                            drift_events: raw.drift ? [{ from: '', to: '', when: '' }] : [],
+                            should_intervene: !!(raw.contradictions && raw.contradictions.length) || !!(raw.questions && raw.questions.length) || !!raw.drift,
+                        };
                         if (analysis.should_intervene || analysis.recommendation || (analysis.unresolved_questions && analysis.unresolved_questions.length)) {
                             DomLayer.renderSystemCard(analysis);
                         }
@@ -474,15 +491,48 @@ const App = (() => {
         );
     }
 
-    function runShadowAudit(responseText, container) {
-        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
-        const shadowModel = [...models].find(m =>
-            m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
-        ) || [...models].find(m =>
-            m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
-        ) || [...models].find(m =>
-            (m.tags?.includes('fast') || m.tags?.includes('lightweight')) && keys[m.provider] && m.type === 'chat'
+    function summarizeSession() {
+        const history = StateManager.get('conversationHistory');
+        if (history.length < 6) return;
+        const cheapModel = _resolveSubModel();
+        if (!cheapModel) return;
+
+        const recent = history.slice(-10).map(m => {
+            const content = typeof m.content === 'string' ? m.content :
+                (Array.isArray(m.content) ? m.content.filter(p => p.type === 'text').map(p => p.text).join(' ') : '');
+            return m.role + ': ' + content.slice(0, 200);
+        }).join('\n');
+
+        const prompt = 'Summarize the topic and key outcomes of this exchange in one brief sentence for context memory. Return ONLY: {"summary":"..."}\n\n' + recent;
+
+        let full = '';
+        const subSignal = StateManager.get('subCallAbort')?.signal;
+        ApiLayer.callProvider(
+            [{ role: 'user', content: prompt }],
+            { ...cheapModel, tools: 'None' },
+            {
+                onToken: (t) => { full += t; },
+                onDone: () => {
+                    try {
+                        const jsonStr = full.match(/\{[\s\S]*\}/)?.[0] || full;
+                        const parsed = JSON.parse(jsonStr);
+                        if (parsed.summary && typeof parsed.summary === 'string') {
+                            StateManager.setLastSessionSummary(parsed.summary);
+                        }
+                    } catch (_) {}
+                },
+                onError: () => {},
+                onToolStart: () => {},
+                onFallback: () => {},
+                onFallbackNotice: () => {},
+            },
+            (subSignal || new AbortController().signal),
+            { noFallback: true }
         );
+    }
+
+    function runShadowAudit(responseText, container) {
+        const shadowModel = _resolveSubModel();
         if (!shadowModel || responseText.length < 50) return;
 
         const history = StateManager.get('conversationHistory');
@@ -493,7 +543,7 @@ const App = (() => {
                 (Array.isArray(lastUserMsg.content) ? lastUserMsg.content.filter(p => p.type === 'text').map(p => p.text).join(' ') : '');
         }
 
-        const prompt = 'Audit this answer. Return ONLY a JSON array: [{"sentence_index":0,"confidence":"high|medium|low","concern":null|"reason"}]\n\nQuestion: ' + question.slice(0, 400) + '\nAnswer: ' + responseText.slice(0, 1500);
+        const prompt = 'Score each sentence for factual confidence. Use "i" for index, "s" for first 30 chars of the sentence, "c" for confidence (high|medium|low), and "f" for a concern reason on low-confidence sentences only. Return ONLY: [{"i":0,"s":"first 30 chars...","c":"high"}]\n\nQuestion: ' + question.slice(0, 300) + '\nAnswer: ' + responseText.slice(0, 1500);
 
         let full = '';
         const subSignal = StateManager.get('subCallAbort')?.signal;
@@ -505,8 +555,14 @@ const App = (() => {
                 onDone: () => {
                     try {
                         const jsonStr = full.match(/\[[\s\S]*\]/)?.[0] || full;
-                        const assessments = JSON.parse(jsonStr);
-                        if (Array.isArray(assessments) && assessments.length) {
+                        const raw = JSON.parse(jsonStr);
+                        if (Array.isArray(raw) && raw.length) {
+                            const assessments = raw.map(r => ({
+                                sentence_index: r.i,
+                                text_snippet: r.s,
+                                confidence: r.c,
+                                concern: r.f || null,
+                            }));
                             DomLayer.annotateResponse(container, assessments);
                         }
                     } catch (_) {}
@@ -528,21 +584,14 @@ const App = (() => {
     function extractEntities(responseText) {
         localEntityExtraction(responseText);
 
-        const keys = JSON.parse(localStorage.getItem('war_chest_keys') || '{}');
-        const cheapModel = [...models].find(m =>
-            m.modelId === 'llama-3.1-8b-instant' && keys[m.provider] && m.type === 'chat'
-        ) || [...models].find(m =>
-            m.tags?.includes('fastest') && keys[m.provider] && m.type === 'chat'
-        ) || [...models].find(m =>
-            (m.tags?.includes('fast') || m.tags?.includes('lightweight')) && keys[m.provider] && m.type === 'chat'
-        );
+        const cheapModel = _resolveSubModel();
         if (!cheapModel) return;
 
         const history = StateManager.get('conversationHistory');
         const lastUser = [...history].reverse().find(m => m.role === 'user');
         const context = lastUser ? (typeof lastUser.content === 'string' ? lastUser.content.slice(0, 300) : '') : '';
 
-        const prompt = 'Extract entities and relationships from this exchange. Return ONLY JSON: {"entities":[{"name":"...","type":"concept|person|decision|question"}],"relationships":[{"from":"...","to":"...","label":"..."}]}\n\nUser: ' + context + '\nAI: ' + responseText.slice(0, 1000);
+        const prompt = 'Extract key named entities and their relationships. Skip generic filler words. Return ONLY: {"entities":[{"n":"Name","t":"concept|person|decision|question"}],"rels":[{"f":"From","to":"To","l":"label"}]}\n\nUser: ' + context + '\nAI: ' + responseText.slice(0, 1000);
 
         let full = '';
         const subSignal = StateManager.get('subCallAbort')?.signal;
@@ -554,18 +603,22 @@ const App = (() => {
                 onDone: () => {
                     try {
                         const jsonStr = full.match(/\{[\s\S]*\}/)?.[0] || full;
-                        const extracted = JSON.parse(jsonStr);
+                        const raw = JSON.parse(jsonStr);
                         const graph = StateManager.get('knowledgeGraph');
-                        for (const e of extracted.entities || []) {
-                            const existing = graph.entities.find(x => x.name === e.name);
-                            if (!existing) graph.entities.push({ ...e, count: 1, pinned: false });
+                        for (const e of raw.entities || []) {
+                            const name = e.n || e.name;
+                            const type = e.t || e.type || 'concept';
+                            if (!name) continue;
+                            const existing = graph.entities.find(x => x.name === name);
+                            if (!existing) graph.entities.push({ name, type, count: 1, pinned: false });
                             else existing.count = (existing.count || 1) + 1;
-                            if (e.pinned) { const ex = graph.entities.find(x => x.name === e.name); if (ex) ex.pinned = true; }
                         }
-                        for (const r of extracted.relationships || []) {
-                            const key = r.from + '\u2192' + r.to + ':' + r.label;
+                        for (const r of raw.rels || raw.relationships || []) {
+                            const rel = { from: r.f || r.from, to: r.to, label: r.l || r.label || '' };
+                            if (!rel.from || !rel.to) continue;
+                            const key = rel.from + '\u2192' + rel.to + ':' + rel.label;
                             if (!graph.relationships.find(x => (x.from + '\u2192' + x.to + ':' + x.label) === key)) {
-                                graph.relationships.push(r);
+                                graph.relationships.push(rel);
                             }
                         }
                         StateManager.set('knowledgeGraph', graph);
@@ -584,7 +637,9 @@ const App = (() => {
     }
 
     function localEntityExtraction(text) {
-        const skipWords = new Set(['This', 'That', 'These', 'Those', 'Here', 'There', 'It', 'They', 'We', 'You', 'I', 'He', 'She', 'The', 'A', 'An', 'And', 'Or', 'But', 'Because', 'However', 'Therefore', 'Also', 'Then', 'Now', 'First', 'Second', 'Third', 'Last', 'Next', 'Previous', 'Each', 'Every', 'Some', 'Any', 'All', 'Both', 'Neither', 'Either']);
+        const skipWords = new Set(['This', 'That', 'These', 'Those', 'Here', 'There', 'It', 'They', 'We', 'You', 'I', 'He', 'She', 'The', 'A', 'An', 'And', 'Or', 'But', 'Because', 'However', 'Therefore', 'Also', 'Then', 'Now', 'First', 'Second', 'Third', 'Last', 'Next', 'Previous', 'Each', 'Every', 'Some', 'Any', 'All', 'Both', 'Neither', 'Either', 'What', 'Which', 'When', 'Where', 'Why', 'How', 'If', 'For', 'With', 'From', 'Not', 'Only', 'Just', 'About', 'After', 'Well', 'Sure', 'Okay', 'Yes', 'No', 'One', 'Two', 'New', 'More', 'Other', 'Their', 'Your', 'His', 'Her', 'Its', 'Our', 'Into']);
+        const skipPhrases = new Set(['Reference Document', 'Session Context', 'Reference Documents', 'User Session', 'Session Context', 'Pinned Knowledge', 'Suggested Action', 'Assistant', 'User']);
+        const commonAcronyms = new Set(['AI', 'API', 'JSON', 'HTML', 'CSS', 'URL', 'HTTP', 'HTTPS', 'SDK', 'IDE', 'GPU', 'CPU', 'SSD', 'RAM', 'AWS', 'GCP', 'ORM', 'CRUD', 'JWT', 'OAuth', 'CORS', 'DOM', 'SQL', 'NoSQL', 'TLS', 'SSH', 'FTP', 'UDP', 'TCP', 'YAML', 'CSV', 'XML', 'RPC', 'NPM', 'CLI', 'GUI', 'UX', 'UI', 'SEO', 'DNS', 'CI', 'CD', 'MVP', 'SaaS', 'PaaS', 'IaaS', 'JVM', 'WASM']);
         const found = new Set();
         const graph = StateManager.get('knowledgeGraph');
         const MAX_ENTITIES = 80;
@@ -598,12 +653,12 @@ const App = (() => {
 
         const namedMatches = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b/g) || [];
         for (const name of namedMatches) {
-            if (skipWords.has(name) || name.length < 4) continue;
+            if (skipWords.has(name) || skipPhrases.has(name) || name.length < 4) continue;
             upsert(name, 'concept');
         }
         const acronymMatches = text.match(/\b([A-Z]{2,8})\b/g) || [];
         for (const acro of acronymMatches) {
-            if (['AI','API','JSON','HTML','CSS'].includes(acro)) continue;
+            if (commonAcronyms.has(acro)) continue;
             upsert(acro, 'concept');
         }
         const quotedMatches = text.match(/"([^"]{3,60})"/g) || [];

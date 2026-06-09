@@ -30,17 +30,17 @@ But the surface-level stuff — chat, markdown, streaming — that's table stake
 
 ### The Ambient Intelligence Layer
 
-This is the thing I haven't seen anywhere else. freeAI runs a background intelligence loop that fires after every fourth message:
+This is the thing I haven't seen anywhere else. freeAI runs a background intelligence loop that fires after every fourth message (and a summarizer every sixth):
 
-**Adversarial Shadow Model.** A second, cheap model silently audits the primary response. Every sentence gets classified: green (agreed), amber (uncertain), or red (disputed). The sentences render with colored underlines. Hover any underline to see what the shadow flagged. This isn't a "confidence score" sitting in a sidebar — it's embedded directly in the text you're reading.
+**Adversarial Shadow Model.** A second, cheap model silently audits the primary response. Every sentence gets classified: green (agreed), amber (uncertain), or red (disputed). The sentences render with colored underlines. Hover any underline to see what the shadow flagged. Sentence matching uses text-snippet prefix alignment so annotations stay correct even on markdown-heavy responses. This isn't a "confidence score" sitting in a sidebar — it's embedded directly in the text you're reading.
 
 **Session Intelligence Watcher.** The same background loop scans the last ten messages for contradictions, unresolved questions, and topic drift. If it finds something, it surfaces a non-intrusive `// Notice:` card with clickable follow-ups. You don't have to remember what you asked three exchanges ago — the system does.
 
 **Delta Mode.** Toggle one button and your next query fans out to four diverse models simultaneously: fast, deep-reasoning, creative, and your current model. Responses render side-by-side in a comparison grid. Same system prompt, same question, no conversation history — a clean A/B/C/D test. Staggered dispatch prevents rate-limit collisions.
 
-**Knowledge Graph.** Entity extraction fires on every response. Local keyword extraction always runs (named entities, acronyms, quoted phrases). When a cheap model is available — works with OpenRouter-only configs — sub-LLM enrichment adds entity types: concept, person, decision, question. Entities persist across refreshes, live in a chip rail above the composer, color-coded by type. Click any chip to see its relationships. The graph accumulates session over session.
+**Knowledge Graph.** Entity extraction fires on every response. Local keyword extraction always runs (named entities, acronyms, quoted phrases) with expanded skip lists filtering 80+ noise words, 10 multi-word phrases, and 40+ common acronyms. When a cheap model is available — works with OpenRouter-only configs — sub-LLM enrichment adds entity types: concept, person, decision, question. Entities persist across refreshes, live in a chip rail above the composer, color-coded by type. Click any chip to see its relationships. The graph accumulates session over session.
 
-**Temporal Cognition.** Every session persists with a timestamp and auto-generated summary. The session timeline lives in the left sidebar — past sessions color-coded, summarized, clickable. The system prompt auto-injects context from your last three sessions so the model knows what you've been working on without you repeating yourself.
+**Temporal Cognition.** Every session persists with a timestamp and auto-generated summary (a cheap LLM call fires every 6 messages, writing a 1-sentence summary to `pendingSessionSummary`). The session timeline lives in the left sidebar — past sessions color-coded, summarized, clickable. The system prompt auto-injects context from your last three sessions so the model knows what you've been working on without you repeating yourself.
 
 ### The Fleet
 
@@ -99,11 +99,11 @@ Keys never leave your browser except to hit the provider APIs. Nothing phones ho
 ```
 index.html    — Entry point, CSS, 600 lines of phosphor-terminal design
 app.js        — Orchestrator: send, delta queries, ambient watcher, shadow audit,
-                entity extraction, voice input, event wiring, init (1,480 lines)
+                entity extraction, voice input, event wiring, init (1,535 lines)
 dom.js        — All DOM rendering: chat, model list, context meter, stream output,
-                delta grid, system cards, shadow annotations, knowledge graph (1,006 lines)
+                delta grid, system cards, shadow annotations, knowledge graph (1,009 lines)
 state.js      — Centralized pub/sub store, streaming counter, token cache,
-                session schema v2, knowledge graph store (228 lines)
+                session schema v2, knowledge graph store, pending summaries (237 lines)
 api.js        — SSE streaming, failover chain, rate-limit retry, tool-call parsing (187 lines)
 models.js     — Fleet data (28 models), constants, tool definitions (60 lines)
 rag.js        — TF-IDF chunking, indexing, retrieval — sentence-aware (49 lines)

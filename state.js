@@ -20,6 +20,8 @@ const StateManager = (() => {
         sessionsLoaded: false,
         lastFallbackFrom: null,
         subCallAbort: null,
+        summaryMessageCount: 0,
+        pendingSessionSummary: null,
     };
     const _listeners = {};
     let _tokenCache = { count: 0, historyLength: -1 };
@@ -114,10 +116,11 @@ const StateManager = (() => {
             id: _state.currentSessionId || crypto.randomUUID(),
             started: _state.currentSessionStart,
             ended: Date.now(),
-            summary: null,
+            summary: _state.pendingSessionSummary || null,
             topics: [],
             messages: _state.conversationHistory.slice(-MAX_HISTORY),
         };
+        _state.pendingSessionSummary = null;
         _state.sessionHistory.push(sessionData);
         if (_state.sessionHistory.length > 20) _state.sessionHistory = _state.sessionHistory.slice(-20);
         _state.currentSessionId = crypto.randomUUID();
@@ -157,6 +160,7 @@ const StateManager = (() => {
             sessionHistory: [], sessionSummaries: [],
             currentSessionStart: Date.now(), sessionsLoaded: true,
             lastFallbackFrom: null, subCallAbort: null,
+            summaryMessageCount: 0, pendingSessionSummary: null,
         });
         (_listeners['*'] || []).forEach(fn => fn(_state));
     }
@@ -219,10 +223,15 @@ const StateManager = (() => {
         else if (!valid) validated[provider] = validated[provider].filter(id => id !== modelId);
     }
 
+    function setLastSessionSummary(summary) {
+        if (!summary) return;
+        _state.pendingSessionSummary = summary;
+    }
+
     return {
         get, set, subscribe, getState, pushMessage, saveConversation, saveConversationNow,
         wipeAll, trimHistoryForModel, compiledPrompt, recompileSystemMessage, setValidated,
         incrementStreaming, decrementStreaming, isStreaming, estimateTokensCached,
-        loadSessionData, endSession,
+        loadSessionData, endSession, setLastSessionSummary,
     };
 })();

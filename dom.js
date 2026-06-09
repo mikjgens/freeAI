@@ -737,11 +737,14 @@ const DomLayer = (() => {
         const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
         if (sentences.length === 0) return;
 
+        const usedSnippets = new Set();
         let annotated = '<div class="annotated-response">';
         for (let i = 0; i < sentences.length; i++) {
-            const a = assessments.find(x => x.sentence_index === i);
-            const trimmed = sentences[i].trim();
+            const trimmed = sentences[i].trim().replace(/^\n+/, '');
             if (!trimmed) continue;
+            let a = assessments.find(x => x.text_snippet && trimmed.startsWith(x.text_snippet) && !usedSnippets.has(x.text_snippet));
+            if (!a) a = assessments.find(x => x.sentence_index === i);
+            if (a && a.text_snippet) usedSnippets.add(a.text_snippet);
             if (a && a.confidence === 'low') {
                 annotated += '<span class="shadow-low" title="' + escapeHtml(a.concern || '') + '">' + trimmed + '</span> ';
             } else if (a && a.confidence === 'medium') {
