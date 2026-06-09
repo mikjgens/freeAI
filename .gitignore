@@ -1,11 +1,17 @@
 .DS_Store
 .env
+.env.*.local
 .playwright-mcp/
 test-result-snapshot
+freeai-full-source.md
 .vscode/
 .idea/
 *.log
 *.key
 *.pem
+*.swp
+*.swo
+*~
 node_modules/
+dist/
 
