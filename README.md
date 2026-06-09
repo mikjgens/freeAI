@@ -149,8 +149,3 @@ User Input → app.js (sendMessage)
 - Internet connection (CDN: Tailwind CSS, JetBrains Mono, marked.js, DOMPurify)
 - Free API keys from Groq and/or OpenRouter
 
----
-
-## License
-
-MIT. Do whatever you want. If you build something cool with it, I'd like to see it.
